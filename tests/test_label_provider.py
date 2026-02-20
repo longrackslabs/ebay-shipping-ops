@@ -55,11 +55,11 @@ def test_stub_label_provider(tmp_path):
         },
     }
     ship_from = ShipFromAddress(
-        name="George Peden",
-        street="456 Ship St",
-        city="Boulder",
-        state="CO",
-        zip_code="80301",
+        name="Longracks Labs (George Peden)",
+        street="1994 NW 129th Pl",
+        city="Portland",
+        state="OR",
+        zip_code="97229",
     )
     parcel = Parcel(length=9, width=6, height=1, weight=3)
     output_path = tmp_path / "label.txt"
@@ -71,7 +71,7 @@ def test_stub_label_provider(tmp_path):
     assert output_path.exists()
     content = output_path.read_text()
     assert "Test Buyer" in content
-    assert "George Peden" in content
+    assert "Longracks Labs (George Peden)" in content
 
 
 @patch("ebay_shipper.label_provider.requests.get")
@@ -115,11 +115,11 @@ def test_easypost_provider_creates_label(mock_client_cls, mock_get, tmp_path):
         },
     }
     ship_from = ShipFromAddress(
-        name="George Peden",
-        street="456 Ship St",
-        city="Boulder",
-        state="CO",
-        zip_code="80301",
+        name="Longracks Labs (George Peden)",
+        street="1994 NW 129th Pl",
+        city="Portland",
+        state="OR",
+        zip_code="97229",
     )
     parcel = Parcel(length=9, width=6, height=1, weight=3)
     output_path = tmp_path / "label.pdf"
@@ -136,7 +136,7 @@ def test_easypost_provider_creates_label(mock_client_cls, mock_get, tmp_path):
     # Verify EasyPost API was called correctly
     create_call = mock_client.shipment.create.call_args
     assert create_call.kwargs["to_address"]["name"] == "Test Buyer"
-    assert create_call.kwargs["from_address"]["name"] == "George Peden"
+    assert create_call.kwargs["from_address"]["name"] == "Longracks Labs (George Peden)"
     assert create_call.kwargs["parcel"]["weight"] == 3
     assert create_call.kwargs["options"]["label_format"] == "PNG"
 
