@@ -8,6 +8,9 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+import easypost
+import requests
+
 logger = logging.getLogger(__name__)
 
 
@@ -94,4 +97,83 @@ class StubLabelProvider:
             rate="0.00",
             carrier="STUB",
             service="StubService",
+        )
+
+
+class EasyPostProvider:
+    """Real shipping label provider using EasyPost API."""
+
+    def __init__(self, api_key: str):
+        self.client = easypost.EasyPostClient(api_key)
+
+    def create_label(
+        self,
+        ship_to: dict,
+        ship_from: ShipFromAddress,
+        parcel: Parcel,
+        output_path: Path,
+    ) -> ShippingLabel:
+        """Create a real USPS shipping label via EasyPost."""
+        # Map eBay address format to EasyPost format
+        contact = ship_to.get("contactAddress", {})
+        to_address = {
+            "name": ship_to.get("fullName", ""),
+            "street1": contact.get("addressLine1", ""),
+            "street2": contact.get("addressLine2", ""),
+            "city": contact.get("city", ""),
+            "state": contact.get("stateOrProvince", ""),
+            "zip": contact.get("postalCode", ""),
+            "country": contact.get("countryCode", "US"),
+        }
+
+        from_address = {
+            "name": ship_from.name,
+            "street1": ship_from.street,
+            "city": ship_from.city,
+            "state": ship_from.state,
+            "zip": ship_from.zip_code,
+            "country": "US",
+        }
+
+        parcel_data = {
+            "length": parcel.length,
+            "width": parcel.width,
+            "height": parcel.height,
+            "weight": parcel.weight,
+        }
+
+        # Create shipment with PDF label format for Rollo printer
+        shipment = self.client.shipment.create(
+            to_address=to_address,
+            from_address=from_address,
+            parcel=parcel_data,
+            options={"label_format": "PDF"},
+        )
+
+        # Buy cheapest USPS rate
+        rate = shipment.lowest_rate(carriers=["USPS"])
+        bought = self.client.shipment.buy(shipment.id, rate=rate)
+
+        # Download label PDF
+        label_url = bought.postage_label.label_url
+        resp = requests.get(label_url, timeout=30)
+        resp.raise_for_status()
+
+        output_path = output_path.with_suffix(".pdf")
+        output_path.write_bytes(resp.content)
+
+        logger.info(
+            "Label created: %s via %s %s — $%s",
+            bought.tracking_code,
+            rate.carrier,
+            rate.service,
+            rate.rate,
+        )
+
+        return ShippingLabel(
+            tracking_number=bought.tracking_code,
+            label_path=output_path,
+            rate=rate.rate,
+            carrier=rate.carrier,
+            service=rate.service,
         )

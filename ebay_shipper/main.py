@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from ebay_shipper.ebay_auth import EbayAuth
 from ebay_shipper.label_provider import (
     STANDARD_PARCEL,
+    EasyPostProvider,
     ShipFromAddress,
     StubLabelProvider,
     calculate_weight,
@@ -112,7 +113,6 @@ def process_order(order: dict, config: dict, label_provider, output_dir: Path) -
         weight=weight,
     )
 
-    # Generate label (stub for now)
     ship_from = ShipFromAddress(
         name=config["from_name"],
         street=config["from_street"],
@@ -120,7 +120,7 @@ def process_order(order: dict, config: dict, label_provider, output_dir: Path) -
         state=config["from_state"],
         zip_code=config["from_zip"],
     )
-    label_path = order_dir / "label.txt"  # will be .zpl or .pdf with real provider
+    label_path = order_dir / "label.pdf"
     label = label_provider.create_label(ship_to, ship_from, parcel, label_path)
 
     # Save order state as pending confirmation
@@ -210,7 +210,10 @@ def main():
         refresh_token=config["ebay_refresh_token"],
     )
     poller = OrderPoller(auth, DATA_DIR)
-    label_provider = StubLabelProvider()
+    if config["easypost_api_key"]:
+        label_provider = EasyPostProvider(config["easypost_api_key"])
+    else:
+        label_provider = StubLabelProvider()
     output_dir = DATA_DIR / "orders"
     output_dir.mkdir(parents=True, exist_ok=True)
 
