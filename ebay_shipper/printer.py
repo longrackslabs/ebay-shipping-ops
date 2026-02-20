@@ -28,8 +28,8 @@ def print_file(file_path: Path, printer_name: str) -> bool:
         # Raw mode for ZPL (thermal printer language)
         cmd.extend(["-o", "raw"])
     elif suffix == ".pdf":
-        # PDF prints normally, CUPS handles rendering
-        cmd.extend(["-o", "media=Custom.4x6in"])
+        # Scale PDF to fill 4x6 label on Rollo thermal printer
+        cmd.extend(["-o", "media=Custom.4x6in", "-o", "fit-to-page"])
 
     cmd.append(str(file_path))
 

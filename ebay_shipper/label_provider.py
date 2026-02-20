@@ -147,7 +147,7 @@ class EasyPostProvider:
             to_address=to_address,
             from_address=from_address,
             parcel=parcel_data,
-            options={"label_format": "PDF"},
+            options={"label_format": "PDF", "label_size": "4x6"},
         )
 
         # Buy cheapest USPS rate
