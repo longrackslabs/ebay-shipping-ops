@@ -38,15 +38,19 @@ class OrderPoller:
         logger.info("Loaded %d previously processed orders", len(processed))
         return processed
 
+    @staticmethod
+    def _format_timestamp(dt: datetime) -> str:
+        """Format a datetime as eBay-compatible ISO8601 (no microseconds, Z suffix)."""
+        return dt.replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     def _get_last_check_time(self) -> str:
         """Get the last poll timestamp, or default to 24h ago."""
         if self.state_file.exists():
             state = json.loads(self.state_file.read_text())
             return state.get("last_check")
         # Default: look back 24 hours
-        dt = datetime.now(timezone.utc).replace(microsecond=0)
-        dt = dt.replace(hour=dt.hour - 24 if dt.hour >= 24 else 0)
-        return datetime(dt.year, dt.month, dt.day - 1, dt.hour, dt.minute, dt.second, tzinfo=timezone.utc).isoformat()
+        from datetime import timedelta
+        return self._format_timestamp(datetime.now(timezone.utc) - timedelta(hours=24))
 
     def _save_last_check_time(self, timestamp: str):
         """Persist the last poll timestamp."""
@@ -74,7 +78,7 @@ class OrderPoller:
 
     def poll(self) -> list[dict]:
         """Poll for new orders since last check. Returns list of new order dicts."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._format_timestamp(datetime.now(timezone.utc))
         last_check = self._get_last_check_time()
 
         logger.info("Polling for orders since %s", last_check)
