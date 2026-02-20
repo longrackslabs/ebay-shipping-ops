@@ -29,7 +29,7 @@ def print_file(file_path: Path, printer_name: str) -> bool:
         cmd.extend(["-o", "raw"])
     elif suffix == ".pdf":
         # Scale PDF to fill 4x6 label on Rollo thermal printer
-        cmd.extend(["-o", "media=Custom.4x6in", "-o", "fit-to-page"])
+        cmd.extend(["-o", "media=w288h432", "-o", "fit-to-page"])
 
     cmd.append(str(file_path))
 

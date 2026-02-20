@@ -19,7 +19,7 @@ def test_print_pdf(mock_run, tmp_path):
     assert cmd[0] == "lpr"
     assert "-P" in cmd
     assert "Rollo" in cmd
-    assert "media=Custom.4x6in" in cmd
+    assert "media=w288h432" in cmd
     assert "fit-to-page" in cmd
 
 
