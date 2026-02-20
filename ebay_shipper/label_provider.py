@@ -142,24 +142,24 @@ class EasyPostProvider:
             "weight": parcel.weight,
         }
 
-        # Create shipment with PDF label format for Rollo printer
+        # Create shipment with ZPL label format for Rollo thermal printer
         shipment = self.client.shipment.create(
             to_address=to_address,
             from_address=from_address,
             parcel=parcel_data,
-            options={"label_format": "PDF", "label_size": "4x6"},
+            options={"label_format": "ZPL", "label_size": "4x6"},
         )
 
         # Buy cheapest USPS rate
         rate = shipment.lowest_rate(carriers=["USPS"])
         bought = self.client.shipment.buy(shipment.id, rate=rate)
 
-        # Download label PDF
+        # Download ZPL label
         label_url = bought.postage_label.label_url
         resp = requests.get(label_url, timeout=30)
         resp.raise_for_status()
 
-        output_path = output_path.with_suffix(".pdf")
+        output_path = output_path.with_suffix(".zpl")
         output_path.write_bytes(resp.content)
 
         logger.info(

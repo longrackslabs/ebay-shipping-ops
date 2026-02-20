@@ -131,14 +131,14 @@ def test_easypost_provider_creates_label(mock_client_cls, mock_get, tmp_path):
     assert label.carrier == "USPS"
     assert label.service == "GroundAdvantage"
     assert label.label_path.exists()
-    assert label.label_path.suffix == ".pdf"
+    assert label.label_path.suffix == ".zpl"
 
     # Verify EasyPost API was called correctly
     create_call = mock_client.shipment.create.call_args
     assert create_call.kwargs["to_address"]["name"] == "Test Buyer"
     assert create_call.kwargs["from_address"]["name"] == "George Peden"
     assert create_call.kwargs["parcel"]["weight"] == 3
-    assert create_call.kwargs["options"]["label_format"] == "PDF"
+    assert create_call.kwargs["options"]["label_format"] == "ZPL"
 
     mock_client.shipment.buy.assert_called_once_with("shp_123", rate=mock_rate)
     mock_shipment.lowest_rate.assert_called_once_with(carriers=["USPS"])
