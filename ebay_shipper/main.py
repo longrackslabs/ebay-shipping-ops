@@ -134,6 +134,13 @@ def process_order(order: dict, config: dict, label_provider, output_dir: Path) -
     }
     (order_dir / "state.json").write_text(json.dumps(state, indent=2))
 
+    # Auto-print packing list
+    printer_name = config["printer_name"]
+    if print_file(packing_list_path, printer_name):
+        logger.info("Packing list printed for %s", order_id)
+    else:
+        logger.error("Failed to auto-print packing list for %s", order_id)
+
     buyer = order.get("buyer", {}).get("username", "unknown")
     total = order.get("pricingSummary", {}).get("total", {}).get("value", "?")
     items = ", ".join(
