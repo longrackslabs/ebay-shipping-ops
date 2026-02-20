@@ -27,8 +27,8 @@ def print_file(file_path: Path, printer_name: str) -> bool:
     if suffix == ".zpl":
         # Raw mode for ZPL (thermal printer language)
         cmd.extend(["-o", "raw"])
-    elif suffix == ".pdf":
-        # Scale PDF to fill 4x6 label on Rollo thermal printer
+    elif suffix in (".pdf", ".png"):
+        # Scale to fill 4x6 label on Rollo thermal printer
         cmd.extend(["-o", "media=w288h432", "-o", "fit-to-page"])
 
     cmd.append(str(file_path))
