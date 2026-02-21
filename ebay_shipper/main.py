@@ -86,11 +86,30 @@ def load_config() -> dict:
     }
 
 
+def _generate_error_label(output_path: Path, order_id: str):
+    """Generate a 4x6 error label PDF so the Rollo alerts you to a failure."""
+    from reportlab.lib.pagesizes import inch
+    from reportlab.pdfgen import canvas
+
+    c = canvas.Canvas(str(output_path), pagesize=(4 * inch, 6 * inch))
+    c.setFont("Helvetica-Bold", 24)
+    c.drawCentredString(2 * inch, 4.5 * inch, "LABEL FAILED")
+    c.setFont("Helvetica", 14)
+    c.drawCentredString(2 * inch, 3.8 * inch, f"Order: {order_id}")
+    c.setFont("Helvetica", 12)
+    c.drawCentredString(2 * inch, 3.2 * inch, "Check EasyPost wallet balance")
+    c.drawCentredString(2 * inch, 2.8 * inch, "and service.log for details")
+    c.save()
+
+
 def process_order(order: dict, config: dict, label_provider, output_dir: Path, auth: EbayAuth = None) -> bool:
     """Process a single order: generate packing list + label, hold for confirmation."""
     order_id = order["orderId"]
     order_dir = output_dir / order_id
     order_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save full order JSON for retry
+    (order_dir / "order.json").write_text(json.dumps(order, indent=2))
 
     # Generate packing list
     packing_list_path = order_dir / "packing_list.pdf"
@@ -121,35 +140,45 @@ def process_order(order: dict, config: dict, label_provider, output_dir: Path, a
         zip_code=config["from_zip"],
     )
     label_path = order_dir / "label.pdf"
-    label = label_provider.create_label(ship_to, ship_from, parcel, label_path)
+    label = None
+    try:
+        label = label_provider.create_label(ship_to, ship_from, parcel, label_path)
+    except Exception:
+        logger.exception("LABEL FAILED for order %s", order_id)
 
-    # Save order state as pending confirmation
+    # Save order state
     state = {
         "order_id": order_id,
-        "status": "pending_confirmation",
-        "tracking_number": label.tracking_number,
-        "rate": label.rate,
+        "status": "label_failed" if label is None else "pending_confirmation",
+        "tracking_number": label.tracking_number if label else "",
+        "rate": label.rate if label else "",
         "packing_list": str(packing_list_path),
-        "label": str(label.label_path),
+        "label": str(label.label_path) if label else "",
     }
     (order_dir / "state.json").write_text(json.dumps(state, indent=2))
 
-    # Auto-print packing list + label
     printer_name = config["printer_name"]
-    if print_file(packing_list_path, printer_name):
-        logger.info("Packing list printed for %s", order_id)
-    else:
-        logger.error("Failed to auto-print packing list for %s", order_id)
+    if label:
+        # Print packing list + label
+        if print_file(packing_list_path, printer_name):
+            logger.info("Packing list printed for %s", order_id)
+        else:
+            logger.error("Failed to auto-print packing list for %s", order_id)
 
-    if print_file(label.label_path, printer_name):
-        logger.info("Label printed for %s", order_id)
-    else:
-        logger.error("Failed to auto-print label for %s", order_id)
+        if print_file(label.label_path, printer_name):
+            logger.info("Label printed for %s", order_id)
+        else:
+            logger.error("Failed to auto-print label for %s", order_id)
 
-    # Upload tracking to eBay (only for production labels)
-    api_key = config.get("easypost_api_key", "")
-    if auth and label.carrier != "STUB" and not api_key.startswith("EZTK"):
-        create_shipping_fulfillment(auth, order, label.tracking_number, label.carrier)
+        # Upload tracking to eBay (only for production labels)
+        api_key = config.get("easypost_api_key", "")
+        if auth and label.carrier != "STUB" and not api_key.startswith("EZTK"):
+            create_shipping_fulfillment(auth, order, label.tracking_number, label.carrier)
+    else:
+        # Only print error label — retry will print both when it succeeds
+        error_path = order_dir / "error_label.pdf"
+        _generate_error_label(error_path, order_id)
+        print_file(error_path, printer_name)
 
     buyer = order.get("buyer", {}).get("username", "unknown")
     total = order.get("pricingSummary", {}).get("total", {}).get("value", "?")
@@ -158,11 +187,11 @@ def process_order(order: dict, config: dict, label_provider, output_dir: Path, a
         for i in order.get("lineItems", [])
     )
     logger.info(
-        "ORDER READY — %s | Buyer: %s | Items: %s | Total: $%s | "
-        "Run: ebay-shipper confirm %s",
-        order_id, buyer, items, total, order_id,
+        "ORDER %s — %s | Buyer: %s | Items: %s | Total: $%s",
+        "READY" if label else "FAILED (no label)",
+        order_id, buyer, items, total,
     )
-    return True
+    return label is not None
 
 
 def confirm_order(order_id: str, config: dict):
@@ -211,6 +240,28 @@ def main():
     if len(sys.argv) >= 3 and sys.argv[1] == "confirm":
         order_id = sys.argv[2]
         success = confirm_order(order_id, config)
+        sys.exit(0 if success else 1)
+
+    if len(sys.argv) >= 3 and sys.argv[1] == "retry":
+        order_id = sys.argv[2]
+        order_dir = DATA_DIR / "orders" / order_id
+        order_file = order_dir / "order.json"
+        state_file = order_dir / "state.json"
+        if not order_file.exists():
+            logger.error("Order %s not found (no order.json)", order_id)
+            sys.exit(1)
+        state = json.loads(state_file.read_text()) if state_file.exists() else {}
+        if state.get("status") != "label_failed":
+            logger.error("Order %s status is '%s', not label_failed", order_id, state.get("status"))
+            sys.exit(1)
+        order = json.loads(order_file.read_text())
+        auth = EbayAuth(
+            client_id=config["ebay_client_id"],
+            client_secret=config["ebay_client_secret"],
+            refresh_token=config["ebay_refresh_token"],
+        )
+        label_provider = EasyPostProvider(config["easypost_api_key"])
+        success = process_order(order, config, label_provider, DATA_DIR / "orders", auth=auth)
         sys.exit(0 if success else 1)
 
     # Service mode: poll for orders
