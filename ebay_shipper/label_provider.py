@@ -78,19 +78,30 @@ class StubLabelProvider:
         parcel: Parcel,
         output_path: Path,
     ) -> ShippingLabel:
-        """Generate a stub label file for testing."""
+        """Generate a stub label PDF for testing."""
+        from reportlab.lib.pagesizes import inch
+        from reportlab.pdfgen import canvas
+
         logger.warning("Using STUB label provider — no real label generated")
-        output_path.write_text(
-            f"STUB SHIPPING LABEL\n"
-            f"To: {ship_to.get('fullName', 'N/A')}\n"
-            f"    {ship_to.get('contactAddress', {}).get('addressLine1', '')}\n"
-            f"    {ship_to.get('contactAddress', {}).get('city', '')}, "
-            f"{ship_to.get('contactAddress', {}).get('stateOrProvince', '')} "
-            f"{ship_to.get('contactAddress', {}).get('postalCode', '')}\n"
-            f"From: {ship_from.name}\n"
-            f"Weight: {parcel.weight}oz\n"
-            f"Tracking: STUB-0000000000\n"
-        )
+        contact = ship_to.get("contactAddress", {})
+        c = canvas.Canvas(str(output_path), pagesize=(4 * inch, 6 * inch))
+        c.setFont("Helvetica-Bold", 18)
+        c.drawCentredString(2 * inch, 5.3 * inch, "STUB SHIPPING LABEL")
+        c.setFont("Helvetica", 12)
+        y = 4.8 * inch
+        lines = [
+            f"To: {ship_to.get('fullName', 'N/A')}",
+            f"    {contact.get('addressLine1', '')}",
+            f"    {contact.get('city', '')}, {contact.get('stateOrProvince', '')} {contact.get('postalCode', '')}",
+            "",
+            f"From: {ship_from.name}",
+            f"Weight: {parcel.weight}oz",
+            f"Tracking: STUB-0000000000",
+        ]
+        for line in lines:
+            c.drawString(0.5 * inch, y, line)
+            y -= 0.3 * inch
+        c.save()
         return ShippingLabel(
             tracking_number="STUB-0000000000",
             label_path=output_path,

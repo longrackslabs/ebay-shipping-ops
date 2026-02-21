@@ -17,6 +17,47 @@ logger = logging.getLogger(__name__)
 FULFILLMENT_API_BASE = "https://api.ebay.com/sell/fulfillment/v1"
 
 
+def create_shipping_fulfillment(
+    auth: EbayAuth,
+    order: dict,
+    tracking_number: str,
+    carrier: str,
+) -> bool:
+    """Upload tracking number to eBay and mark order as shipped.
+
+    WARNING: This is irreversible. Only call with real tracking numbers.
+    """
+    order_id = order["orderId"]
+    line_items = [
+        {"lineItemId": item["lineItemId"], "quantity": item.get("quantity", 1)}
+        for item in order.get("lineItems", [])
+    ]
+
+    token = auth.get_access_token()
+    response = requests.post(
+        f"{FULFILLMENT_API_BASE}/order/{order_id}/shipping_fulfillment",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "lineItems": line_items,
+            "shippingCarrierCode": carrier,
+            "trackingNumber": tracking_number,
+        },
+    )
+
+    if response.status_code == 201:
+        logger.info("Order %s marked as shipped — tracking: %s", order_id, tracking_number)
+        return True
+    else:
+        logger.error(
+            "Failed to mark order %s as shipped: %s %s",
+            order_id, response.status_code, response.text,
+        )
+        return False
+
+
 class OrderPoller:
     def __init__(self, auth: EbayAuth, data_dir: Path):
         self.auth = auth

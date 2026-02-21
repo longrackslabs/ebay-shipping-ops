@@ -21,7 +21,7 @@ from ebay_shipper.label_provider import (
     StubLabelProvider,
     calculate_weight,
 )
-from ebay_shipper.order_poller import OrderPoller
+from ebay_shipper.order_poller import OrderPoller, create_shipping_fulfillment
 from ebay_shipper.packing_list import generate_packing_list
 from ebay_shipper.printer import print_file
 
@@ -86,7 +86,7 @@ def load_config() -> dict:
     }
 
 
-def process_order(order: dict, config: dict, label_provider, output_dir: Path) -> bool:
+def process_order(order: dict, config: dict, label_provider, output_dir: Path, auth: EbayAuth = None) -> bool:
     """Process a single order: generate packing list + label, hold for confirmation."""
     order_id = order["orderId"]
     order_dir = output_dir / order_id
@@ -145,6 +145,11 @@ def process_order(order: dict, config: dict, label_provider, output_dir: Path) -
         logger.info("Label printed for %s", order_id)
     else:
         logger.error("Failed to auto-print label for %s", order_id)
+
+    # Upload tracking to eBay (only for production labels)
+    api_key = config.get("easypost_api_key", "")
+    if auth and label.carrier != "STUB" and not api_key.startswith("EZTK"):
+        create_shipping_fulfillment(auth, order, label.tracking_number, label.carrier)
 
     buyer = order.get("buyer", {}).get("username", "unknown")
     total = order.get("pricingSummary", {}).get("total", {}).get("value", "?")
@@ -233,7 +238,7 @@ def main():
         try:
             new_orders = poller.poll()
             for order in new_orders:
-                process_order(order, config, label_provider, output_dir)
+                process_order(order, config, label_provider, output_dir, auth=auth)
             if not new_orders:
                 logger.debug("No new orders")
         except Exception:

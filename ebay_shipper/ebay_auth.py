@@ -42,7 +42,7 @@ class EbayAuth:
             data={
                 "grant_type": "refresh_token",
                 "refresh_token": self.refresh_token,
-                "scope": "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+                "scope": "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
             },
         )
         response.raise_for_status()
