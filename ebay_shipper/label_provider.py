@@ -158,8 +158,13 @@ class EasyPostProvider:
             "country": contact.get("countryCode", "US"),
         }
 
+        # Compose label name: "Company (Person)" or just the name
+        label_name = ship_from.name
+        if ship_from.company:
+            label_name = f"{ship_from.company} ({ship_from.name})"
+
         from_address = {
-            "name": ship_from.name,
+            "name": label_name,
             "street1": ship_from.street,
             "city": ship_from.city,
             "state": ship_from.state,
