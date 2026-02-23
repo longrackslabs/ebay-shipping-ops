@@ -11,8 +11,8 @@ Everything started manual. Here's what we've automated and what's left.
 | Detect new sale | Check eBay app | **AUTOMATED** |
 | Buy shipping label | Buy through eBay Seller Hub | **AUTOMATED** |
 | Print label | Download PDF, open, print | **AUTOMATED** |
-| Print packing list | Handwritten / skipped | **AUTOMATED** |
-| Upload tracking to eBay | Copy/paste in Seller Hub | **AUTOMATED** |
+| Print packing list | Print from eBay Seller Hub | **AUTOMATED** |
+| Upload tracking to eBay | Auto (if bought through eBay) | **AUTOMATED** |
 
 ## Fulfillment
 
@@ -26,9 +26,10 @@ Everything started manual. Here's what we've automated and what's left.
 
 | Step | Before (all manual) | After |
 |------|---------------------|-------|
-| Update inventory counts | Google Sheets | Cowork cmd (manual) |
-| Restock decision | Gut feel | Cowork cmd (manual) |
-| Update financials | Google Sheets | Google Sheets (manual) |
+| Update inventory counts | Google Sheets | **AUTOMATED** (Cowork cmd) |
+| Restock decision | Gut feel | **AUTOMATED** (Cowork cmd) |
+| Update financials (per order) | Google Sheets | **AUTOMATED** (Cowork cmd) |
+| Monthly/quarterly close | Google Sheets | Google Sheets (manual) |
 
 ## Sourcing
 
@@ -46,4 +47,4 @@ Everything started manual. Here's what we've automated and what's left.
 
 **After:** 3 steps — pick, pack, porch
 
-**Automated:** 8 &nbsp;|&nbsp; **Manual (irreducible):** 5 &nbsp;|&nbsp; **Manual (automatable next):** 4
+**Automated:** 11 &nbsp;|&nbsp; **Manual (irreducible):** 5 &nbsp;|&nbsp; **Manual (automatable next):** 2
