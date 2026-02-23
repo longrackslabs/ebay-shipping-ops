@@ -23,6 +23,8 @@ class ShipFromAddress:
     city: str
     state: str
     zip_code: str
+    phone: str = ""
+    company: str = ""
 
 
 @dataclass
@@ -237,16 +239,21 @@ class EasyPostProvider:
         max_dt = f"{pickup_date}T12:00:00Z"
 
         try:
-            pickup = self.client.pickup.create(
-                shipment={"id": shipment_id},
-                address={
+            address = {
                     "name": ship_from.name,
                     "street1": ship_from.street,
                     "city": ship_from.city,
                     "state": ship_from.state,
                     "zip": ship_from.zip_code,
                     "country": "US",
-                },
+                    "phone": ship_from.phone,
+                }
+            if ship_from.company:
+                address["company"] = ship_from.company
+
+            pickup = self.client.pickup.create(
+                shipment={"id": shipment_id},
+                address=address,
                 min_datetime=min_dt,
                 max_datetime=max_dt,
                 instructions=instructions,

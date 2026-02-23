@@ -12,11 +12,13 @@ from ebay_shipper.label_provider import (
 
 
 SHIP_FROM = ShipFromAddress(
-    name="Longracks Labs (George Peden)",
+    name="George Peden",
     street="1994 NW 129th Pl",
     city="Portland",
     state="OR",
     zip_code="97229",
+    phone="5033494247",
+    company="Longracks Labs",
 )
 
 
@@ -41,7 +43,9 @@ def test_schedule_pickup_creates_and_buys(mock_client_cls, tmp_path):
 
     # Verify pickup was created with correct address
     create_call = mock_client.pickup.create.call_args
-    assert create_call.kwargs["address"]["name"] == "Longracks Labs (George Peden)"
+    assert create_call.kwargs["address"]["name"] == "George Peden"
+    assert create_call.kwargs["address"]["phone"] == "5033494247"
+    assert create_call.kwargs["address"]["company"] == "Longracks Labs"
     assert create_call.kwargs["address"]["street1"] == "1994 NW 129th Pl"
     assert create_call.kwargs["address"]["zip"] == "97229"
     assert create_call.kwargs["shipment"] == {"id": "shp_abc"}

@@ -84,6 +84,8 @@ def load_config() -> dict:
         "from_state": os.getenv("FROM_STATE", ""),
         "from_zip": os.getenv("FROM_ZIP", ""),
         "pickup_instructions": os.getenv("PICKUP_INSTRUCTIONS", "Front porch"),
+        "from_phone": os.getenv("FROM_PHONE", ""),
+        "from_company": os.getenv("FROM_COMPANY", ""),
     }
 
 
@@ -179,15 +181,17 @@ def process_order(order: dict, config: dict, label_provider, output_dir: Path, a
 
         # Schedule USPS pickup (only for production EasyPost labels)
         if is_production and isinstance(label_provider, EasyPostProvider) and label.shipment_id:
-            ship_from = ShipFromAddress(
+            pickup_from = ShipFromAddress(
                 name=config["from_name"],
                 street=config["from_street"],
                 city=config["from_city"],
                 state=config["from_state"],
                 zip_code=config["from_zip"],
+                phone=config["from_phone"],
+                company=config["from_company"],
             )
             label_provider.schedule_pickup(
-                label.shipment_id, ship_from, output_dir.parent,
+                label.shipment_id, pickup_from, output_dir.parent,
                 instructions=config["pickup_instructions"],
             )
     else:
