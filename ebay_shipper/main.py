@@ -83,6 +83,7 @@ def load_config() -> dict:
         "from_city": os.getenv("FROM_CITY", ""),
         "from_state": os.getenv("FROM_STATE", ""),
         "from_zip": os.getenv("FROM_ZIP", ""),
+        "pickup_instructions": os.getenv("PICKUP_INSTRUCTIONS", "Front porch"),
     }
 
 
@@ -172,8 +173,23 @@ def process_order(order: dict, config: dict, label_provider, output_dir: Path, a
 
         # Upload tracking to eBay (only for production labels)
         api_key = config.get("easypost_api_key", "")
-        if auth and label.carrier != "STUB" and not api_key.startswith("EZTK"):
+        is_production = auth and label.carrier != "STUB" and not api_key.startswith("EZTK")
+        if is_production:
             create_shipping_fulfillment(auth, order, label.tracking_number, label.carrier)
+
+        # Schedule USPS pickup (only for production EasyPost labels)
+        if is_production and isinstance(label_provider, EasyPostProvider) and label.shipment_id:
+            ship_from = ShipFromAddress(
+                name=config["from_name"],
+                street=config["from_street"],
+                city=config["from_city"],
+                state=config["from_state"],
+                zip_code=config["from_zip"],
+            )
+            label_provider.schedule_pickup(
+                label.shipment_id, ship_from, output_dir.parent,
+                instructions=config["pickup_instructions"],
+            )
     else:
         # Only print error label — retry will print both when it succeeds
         error_path = order_dir / "error_label.pdf"

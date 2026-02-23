@@ -4,8 +4,10 @@ Abstracts label generation so we can swap providers (EasyPost, Shippo, etc.)
 without changing the rest of the code.
 """
 
+import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import easypost
@@ -38,6 +40,7 @@ class ShippingLabel:
     rate: str  # e.g. "3.50"
     carrier: str  # e.g. "USPS"
     service: str  # e.g. "ParcelSelect"
+    shipment_id: str = ""  # EasyPost shipment ID, needed for pickup scheduling
 
 
 # Standard parcel for all nozzle shipments
@@ -109,6 +112,22 @@ class StubLabelProvider:
             carrier="STUB",
             service="StubService",
         )
+
+
+def _pickup_state_path(data_dir: Path) -> Path:
+    return data_dir / "pickup_state.json"
+
+
+def _load_pickup_state(data_dir: Path) -> dict:
+    path = _pickup_state_path(data_dir)
+    if path.exists():
+        return json.loads(path.read_text())
+    return {}
+
+
+def _save_pickup_state(data_dir: Path, state: dict):
+    path = _pickup_state_path(data_dir)
+    path.write_text(json.dumps(state, indent=2))
 
 
 class EasyPostProvider:
@@ -187,4 +206,73 @@ class EasyPostProvider:
             rate=rate.rate,
             carrier=rate.carrier,
             service=rate.service,
+            shipment_id=bought.id,
         )
+
+    def schedule_pickup(
+        self,
+        shipment_id: str,
+        ship_from: ShipFromAddress,
+        data_dir: Path,
+        instructions: str = "Front porch",
+    ) -> str | None:
+        """Schedule a USPS pickup for the next delivery day.
+
+        Skips if a pickup is already scheduled for tomorrow. Returns the
+        pickup confirmation or None if skipped/failed.
+        """
+        now = datetime.now(timezone.utc)
+        tomorrow = now + timedelta(days=1)
+        pickup_date = tomorrow.strftime("%Y-%m-%d")
+
+        # Check if we already have a pickup scheduled for tomorrow
+        state = _load_pickup_state(data_dir)
+        if state.get("pickup_date") == pickup_date and state.get("status") == "scheduled":
+            logger.info("Pickup already scheduled for %s (confirmation: %s)",
+                        pickup_date, state.get("confirmation"))
+            return state.get("confirmation")
+
+        # Schedule pickup window: 8am-12pm local time tomorrow
+        min_dt = f"{pickup_date}T08:00:00Z"
+        max_dt = f"{pickup_date}T12:00:00Z"
+
+        try:
+            pickup = self.client.pickup.create(
+                shipment={"id": shipment_id},
+                address={
+                    "name": ship_from.name,
+                    "street1": ship_from.street,
+                    "city": ship_from.city,
+                    "state": ship_from.state,
+                    "zip": ship_from.zip_code,
+                    "country": "US",
+                },
+                min_datetime=min_dt,
+                max_datetime=max_dt,
+                instructions=instructions,
+                is_account_address=True,
+            )
+
+            # Buy the USPS pickup (free)
+            bought = self.client.pickup.buy(
+                pickup.id,
+                carrier="USPS",
+                service="NextDay",
+            )
+
+            confirmation = getattr(bought, "confirmation", pickup.id)
+            _save_pickup_state(data_dir, {
+                "pickup_date": pickup_date,
+                "pickup_id": pickup.id,
+                "confirmation": confirmation,
+                "status": "scheduled",
+                "scheduled_at": now.isoformat(),
+            })
+
+            logger.info("USPS pickup scheduled for %s (confirmation: %s)",
+                        pickup_date, confirmation)
+            return confirmation
+
+        except Exception:
+            logger.exception("Failed to schedule USPS pickup")
+            return None
