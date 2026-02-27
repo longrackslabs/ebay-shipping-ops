@@ -156,6 +156,7 @@ def process_order(order: dict, config: dict, label_provider, output_dir: Path, a
         "status": "label_failed" if label is None else "pending_confirmation",
         "tracking_number": label.tracking_number if label else "",
         "rate": label.rate if label else "",
+        "shipment_id": label.shipment_id if label else "",
         "packing_list": str(packing_list_path),
         "label": str(label.label_path) if label else "",
     }
@@ -251,6 +252,88 @@ def confirm_order(order_id: str, config: dict):
     return True
 
 
+def schedule_pickup_command(order_id: str | None, config: dict) -> bool:
+    """Schedule a USPS pickup. Uses order's shipment_id, or retrieves from EasyPost."""
+    if not config["easypost_api_key"]:
+        logger.error("No EASYPOST_API_KEY configured")
+        return False
+
+    provider = EasyPostProvider(config["easypost_api_key"])
+    orders_dir = DATA_DIR / "orders"
+
+    # Find the order to use
+    if order_id:
+        order_dir = orders_dir / order_id
+    else:
+        # Find most recent order with a real tracking number
+        candidates = []
+        for d in sorted(orders_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+            sf = d / "state.json"
+            if sf.exists():
+                s = json.loads(sf.read_text())
+                if s.get("tracking_number") and not s["tracking_number"].startswith("STUB"):
+                    candidates.append((d, s))
+                    break
+        if not candidates:
+            logger.error("No orders with real tracking numbers found")
+            return False
+        order_dir, _ = candidates[0]
+
+    state_file = order_dir / "state.json"
+    if not state_file.exists():
+        logger.error("Order %s not found", order_dir.name)
+        return False
+
+    state = json.loads(state_file.read_text())
+    shipment_id = state.get("shipment_id", "")
+
+    # If no shipment_id saved, look it up from EasyPost by tracking number
+    if not shipment_id:
+        tracking = state.get("tracking_number", "")
+        if not tracking:
+            logger.error("Order %s has no tracking number or shipment_id", order_dir.name)
+            return False
+        logger.info("No shipment_id saved, looking up from EasyPost by tracking %s...", tracking)
+        try:
+            shipments = provider.client.shipment.all(page_size=20)
+            for s in shipments["shipments"]:
+                if s.tracking_code == tracking:
+                    shipment_id = s.id
+                    # Save it for future use
+                    state["shipment_id"] = shipment_id
+                    state_file.write_text(json.dumps(state, indent=2))
+                    logger.info("Found shipment_id: %s", shipment_id)
+                    break
+            if not shipment_id:
+                logger.error("Could not find shipment for tracking %s in recent EasyPost shipments", tracking)
+                return False
+        except Exception:
+            logger.exception("Failed to look up shipment from EasyPost")
+            return False
+
+    ship_from = ShipFromAddress(
+        name=config["from_name"],
+        street=config["from_street"],
+        city=config["from_city"],
+        state=config["from_state"],
+        zip_code=config["from_zip"],
+        phone=config.get("from_phone", ""),
+        company=config.get("from_company", ""),
+    )
+
+    confirmation = provider.schedule_pickup(
+        shipment_id, ship_from, DATA_DIR,
+        instructions=config.get("pickup_instructions", "Front porch"),
+    )
+
+    if confirmation:
+        logger.info("Pickup scheduled for order %s (confirmation: %s)", order_dir.name, confirmation)
+        return True
+    else:
+        logger.error("Failed to schedule pickup for order %s", order_dir.name)
+        return False
+
+
 def main():
     """Main entry point."""
     setup_logging()
@@ -284,6 +367,12 @@ def main():
         )
         label_provider = EasyPostProvider(config["easypost_api_key"])
         success = process_order(order, config, label_provider, DATA_DIR / "orders", auth=auth)
+        sys.exit(0 if success else 1)
+
+    if len(sys.argv) >= 2 and sys.argv[1] == "pickup":
+        # Schedule USPS pickup for a specific order (or most recent)
+        order_id = sys.argv[2] if len(sys.argv) >= 3 else None
+        success = schedule_pickup_command(order_id, config)
         sys.exit(0 if success else 1)
 
     # Service mode: poll for orders

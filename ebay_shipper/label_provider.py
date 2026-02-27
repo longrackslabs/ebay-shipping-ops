@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import easypost
 import requests
@@ -228,7 +229,8 @@ class EasyPostProvider:
         Skips if a pickup is already scheduled for tomorrow. Returns the
         pickup confirmation or None if skipped/failed.
         """
-        now = datetime.now(timezone.utc)
+        pacific = ZoneInfo("America/Los_Angeles")
+        now = datetime.now(pacific)
         tomorrow = now + timedelta(days=1)
         pickup_date = tomorrow.strftime("%Y-%m-%d")
 
@@ -239,9 +241,9 @@ class EasyPostProvider:
                         pickup_date, state.get("confirmation"))
             return state.get("confirmation")
 
-        # Schedule pickup window: 8am-12pm local time tomorrow
-        min_dt = f"{pickup_date}T08:00:00Z"
-        max_dt = f"{pickup_date}T12:00:00Z"
+        # Schedule pickup window: 8am-12pm Pacific (handles PST/PDT automatically)
+        min_dt = tomorrow.replace(hour=8, minute=0, second=0, microsecond=0).isoformat()
+        max_dt = tomorrow.replace(hour=12, minute=0, second=0, microsecond=0).isoformat()
 
         try:
             address = {
@@ -278,7 +280,7 @@ class EasyPostProvider:
                 "pickup_id": pickup.id,
                 "confirmation": confirmation,
                 "status": "scheduled",
-                "scheduled_at": now.isoformat(),
+                "scheduled_at": datetime.now(pacific).isoformat(),
             })
 
             logger.info("USPS pickup scheduled for %s (confirmation: %s)",
