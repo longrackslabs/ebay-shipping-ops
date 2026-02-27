@@ -213,8 +213,9 @@ function actionBtn(order) {
     packed: 'Schedule',
     pickup_scheduled: 'Porch',
   };
-  // Reprint — available whenever there's a label
-  if (order.tracking_number && order.tracking_number !== 'STUB-0000000000') {
+  // Reprint — only while order is still in your hands and active
+  const reprintable = ['pending_confirmation', 'packed', 'pickup_scheduled'];
+  if (reprintable.includes(order.status) && order.tracking_number && order.tracking_number !== 'STUB-0000000000') {
     btns.push(`<button class="btn btn-muted" onclick="doAction('${order.order_id}','reprint')">Reprint</button>`);
   }
   // Next step in the flow
