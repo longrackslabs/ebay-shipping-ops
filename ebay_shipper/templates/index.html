@@ -169,7 +169,7 @@ function timeSince(ts) {
 function statusBadge(status) {
   const map = {
     shipped: ['Shipped', 'badge-shipped'],
-    pending_confirmation: ['Pending', 'badge-pending'],
+    pending_confirmation: ['Printed', 'badge-pending'],
     label_failed: ['Failed', 'badge-failed'],
   };
   const [label, cls] = map[status] || [status, ''];
