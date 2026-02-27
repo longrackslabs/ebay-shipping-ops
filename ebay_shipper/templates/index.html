@@ -155,6 +155,7 @@ tailwind.config = {
 <script>
 const REFRESH_MS = 30000;
 let lastRefresh = Date.now();
+let STATES = {};  // loaded from /api/states on init
 
 function showToast(msg, ok) {
   const t = document.getElementById('toast');
@@ -183,21 +184,10 @@ function formatDate(iso) {
 }
 
 function statusBadge(status) {
-  const map = {
-    pending_confirmation: ['Printed', 'badge-pending'],
-    packed: ['Packed', 'badge-pending'],
-    pickup_scheduled: ['Scheduled', 'badge-pending'],
-    porched: ['Porched', 'badge-shipped'],
-    in_transit: ['In Transit', 'badge-shipped'],
-    out_for_delivery: ['Out for Delivery', 'badge-shipped'],
-    delivered: ['Delivered', 'badge-shipped'],
-    cancelled: ['Cancelled', 'badge-terminal'],
-    lost: ['Lost', 'badge-failed'],
-    return_to_sender: ['Returned', 'badge-failed'],
-    label_failed: ['Failed', 'badge-failed'],
-  };
-  const [label, cls] = map[status] || [status, ''];
-  return `<span class="badge ${cls}">${label}</span>`;
+  const cfg = STATES[status] || {};
+  const label = cfg.label || status;
+  const badge = cfg.badge || '';
+  return `<span class="badge badge-${badge}">${label}</span>`;
 }
 
 function trackingLink(tn) {
@@ -207,23 +197,17 @@ function trackingLink(tn) {
 }
 
 function actionBtn(order) {
+  const cfg = STATES[order.status] || {};
+  const actions = cfg.actions || [];
   const btns = [];
-  const flow = {
-    pending_confirmation: 'Pack',
-    packed: 'Schedule',
-    pickup_scheduled: 'Porch',
-  };
-  // Reprint — only while order is still in your hands and active
-  const reprintable = ['pending_confirmation', 'packed', 'pickup_scheduled'];
-  if (reprintable.includes(order.status) && order.tracking_number && order.tracking_number !== 'STUB-0000000000') {
+
+  if (actions.includes('reprint') && order.tracking_number && order.tracking_number !== 'STUB-0000000000') {
     btns.push(`<button class="btn btn-muted" onclick="doAction('${order.order_id}','reprint')">Reprint</button>`);
   }
-  // Next step in the flow
-  if (flow[order.status]) {
-    btns.push(`<button class="btn btn-amber" onclick="doAction('${order.order_id}','advance')">${flow[order.status]}</button>`);
+  if (actions.includes('advance') && cfg.advance_label) {
+    btns.push(`<button class="btn btn-amber" onclick="doAction('${order.order_id}','advance')">${cfg.advance_label}</button>`);
   }
-  // Retry for failed labels
-  if (order.status === 'label_failed') {
+  if (actions.includes('retry')) {
     btns.push(`<button class="btn btn-rose" onclick="doAction('${order.order_id}','retry')">Retry</button>`);
   }
   return btns.join(' ');
@@ -237,7 +221,7 @@ async function doAction(id, action) {
     const r = await fetch(`/api/orders/${id}/${action}`, { method: 'POST' });
     const d = await r.json();
     if (r.ok && d.success) {
-      const msg = d.status ? `→ ${d.status}` : (action === 'reprint' ? 'Sent to printer' : 'Done');
+      const msg = d.status ? `→ ${STATES[d.status]?.label || d.status}` : (action === 'reprint' ? 'Sent to printer' : 'Done');
       showToast(msg, true);
     } else {
       showToast(d.detail || 'Action failed', false);
@@ -279,13 +263,11 @@ function renderOrders(orders) {
 
 function renderBanner(orders) {
   const el = document.getElementById('banner');
-  const done = ['porched', 'in_transit', 'out_for_delivery', 'delivered', 'cancelled', 'lost', 'return_to_sender'];
-  const actionable = orders.filter(o => !done.includes(o.status));
+  const actionable = orders.filter(o => (STATES[o.status] || {}).needs_attention);
   if (actionable.length > 0) {
     const counts = {};
     actionable.forEach(o => { counts[o.status] = (counts[o.status] || 0) + 1; });
-    const labels = { pending_confirmation: 'to pack', packed: 'to schedule', pickup_scheduled: 'to porch', label_failed: 'failed' };
-    const parts = Object.entries(counts).map(([s, n]) => `${n} ${labels[s] || s}`);
+    const parts = Object.entries(counts).map(([s, n]) => `${n} ${STATES[s]?.attention_label || s}`);
     el.textContent = actionable.length + (actionable.length === 1 ? ' order needs' : ' orders need') + ' attention — ' + parts.join(', ');
     el.className = 'mb-6 px-5 py-3.5 rounded-lg font-medium text-sm fade-in border';
     el.style.background = '#ed893612';
@@ -361,9 +343,13 @@ function updateClock() {
   document.getElementById('last-updated').textContent = 'Updated ' + timeSince(lastRefresh);
 }
 
-refresh();
-setInterval(refresh, REFRESH_MS);
-setInterval(updateClock, 1000);
+// Load states once on init, then start refreshing
+fetch('/api/states').then(r => r.json()).then(s => {
+  STATES = s;
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+  setInterval(updateClock, 1000);
+});
 </script>
 </body>
 </html>

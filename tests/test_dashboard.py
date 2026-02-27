@@ -214,8 +214,8 @@ def test_retry_wrong_status(mock_print, data_dir, client):
     mock_print.assert_not_called()
 
 
-def test_advance_order_through_flow(data_dir, client):
-    """POST /api/orders/{id}/advance walks through the fulfillment flow."""
+def test_advance_order_through_manual_flow(data_dir, client):
+    """POST /api/orders/{id}/advance walks through the manual fulfillment steps."""
     oid = "22-22222-22222"
 
     # pending_confirmation → packed
@@ -233,28 +233,13 @@ def test_advance_order_through_flow(data_dir, client):
     assert resp.status_code == 200
     assert resp.json()["status"] == "porched"
 
-    # porched → in_transit
-    resp = client.post(f"/api/orders/{oid}/advance")
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "in_transit"
-
-    # in_transit → out_for_delivery
-    resp = client.post(f"/api/orders/{oid}/advance")
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "out_for_delivery"
-
-    # out_for_delivery → delivered
-    resp = client.post(f"/api/orders/{oid}/advance")
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "delivered"
-
-    # delivered is terminal — can't advance
+    # porched has no manual advance — tracking poll handles the rest
     resp = client.post(f"/api/orders/{oid}/advance")
     assert resp.status_code == 400
 
     # Verify state.json was updated on disk
     state = json.loads((data_dir / "orders" / oid / "state.json").read_text())
-    assert state["status"] == "delivered"
+    assert state["status"] == "porched"
 
 
 def test_advance_rejects_failed_orders(data_dir, client):
@@ -273,12 +258,22 @@ def test_cancel_order(data_dir, client):
     assert state["status"] == "cancelled"
 
 
+def test_get_states(client):
+    """GET /api/states returns all state definitions."""
+    resp = client.get("/api/states")
+    assert resp.status_code == 200
+    states = resp.json()
+    assert "pending_confirmation" in states
+    assert states["pending_confirmation"]["label"] == "Printed"
+    assert "advance" in states["pending_confirmation"]["actions"]
+    assert states["delivered"]["actions"] == []
+
+
 def test_cancel_rejects_terminal(data_dir, client):
-    """POST /api/orders/{id}/cancel rejects already-delivered orders."""
-    # First advance to delivered
+    """POST /api/orders/{id}/cancel rejects already-cancelled orders."""
+    # First cancel the order
     oid = "22-22222-22222"
-    for _ in range(6):
-        client.post(f"/api/orders/{oid}/advance")
+    client.post(f"/api/orders/{oid}/cancel")
 
     resp = client.post(f"/api/orders/{oid}/cancel")
     assert resp.status_code == 400
