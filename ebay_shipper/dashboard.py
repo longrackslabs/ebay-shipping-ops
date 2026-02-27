@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 STALE_LOG_SECONDS = 600  # 10 minutes — service polls every 5 min
 
+# Fulfillment flow: each state advances to the next
+FLOW = ["pending_confirmation", "packed", "pickup_scheduled", "porched", "shipped"]
+
 
 def _read_orders(data_dir: Path) -> list[dict]:
     """Read all orders from data dir, merging state.json + order.json."""
@@ -130,6 +133,30 @@ def create_app(data_dir: Path, config: dict | None = None) -> FastAPI:
             raise HTTPException(400, f"Order status is '{state['status']}', not label_failed")
 
         return {"success": True, "message": "Order queued for retry"}
+
+    @app.post("/api/orders/{order_id}/advance")
+    def advance_order(order_id: str):
+        order_dir = data_dir / "orders" / order_id
+        state_file = order_dir / "state.json"
+        if not state_file.exists():
+            raise HTTPException(404, f"Order {order_id} not found")
+
+        state = json.loads(state_file.read_text())
+        current = state["status"]
+
+        if current not in FLOW:
+            raise HTTPException(400, f"Order status '{current}' is not in the fulfillment flow")
+
+        idx = FLOW.index(current)
+        if idx >= len(FLOW) - 1:
+            raise HTTPException(400, f"Order is already at final status '{current}'")
+
+        next_status = FLOW[idx + 1]
+        state["status"] = next_status
+        state_file.write_text(json.dumps(state, indent=2))
+        logger.info("Order %s: %s → %s", order_id, current, next_status)
+
+        return {"success": True, "previous": current, "status": next_status}
 
     @app.get("/", response_class=HTMLResponse)
     def index():

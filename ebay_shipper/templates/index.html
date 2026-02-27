@@ -181,8 +181,11 @@ function formatDate(iso) {
 
 function statusBadge(status) {
   const map = {
-    shipped: ['Shipped', 'badge-shipped'],
     pending_confirmation: ['Printed', 'badge-pending'],
+    packed: ['Packed', 'badge-pending'],
+    pickup_scheduled: ['Scheduled', 'badge-pending'],
+    porched: ['Porched', 'badge-shipped'],
+    shipped: ['Shipped', 'badge-shipped'],
     label_failed: ['Failed', 'badge-failed'],
   };
   const [label, cls] = map[status] || [status, ''];
@@ -196,8 +199,13 @@ function trackingLink(tn) {
 }
 
 function actionBtn(order) {
-  if (order.status === 'pending_confirmation') {
-    return `<button class="btn btn-amber" onclick="doAction('${order.order_id}','reprint')">Reprint</button>`;
+  const flow = {
+    pending_confirmation: 'Pack',
+    packed: 'Schedule',
+    pickup_scheduled: 'Porch',
+  };
+  if (flow[order.status]) {
+    return `<button class="btn btn-amber" onclick="doAction('${order.order_id}','advance')">${flow[order.status]}</button>`;
   }
   if (order.status === 'label_failed') {
     return `<button class="btn btn-rose" onclick="doAction('${order.order_id}','retry')">Retry</button>`;
@@ -208,12 +216,13 @@ function actionBtn(order) {
 async function doAction(id, action) {
   const btn = event.target;
   btn.disabled = true;
-  btn.textContent = action === 'reprint' ? 'Printing...' : 'Retrying...';
+  btn.textContent = '...';
   try {
     const r = await fetch(`/api/orders/${id}/${action}`, { method: 'POST' });
     const d = await r.json();
     if (r.ok && d.success) {
-      showToast(action === 'reprint' ? 'Sent to printer' : 'Retry queued', true);
+      const msg = d.status ? `→ ${d.status}` : (action === 'reprint' ? 'Sent to printer' : 'Done');
+      showToast(msg, true);
     } else {
       showToast(d.detail || 'Action failed', false);
     }
@@ -254,14 +263,13 @@ function renderOrders(orders) {
 
 function renderBanner(orders) {
   const el = document.getElementById('banner');
-  const needAction = orders.filter(o => o.status === 'pending_confirmation' || o.status === 'label_failed');
-  if (needAction.length > 0) {
-    const failed = needAction.filter(o => o.status === 'label_failed').length;
-    const pending = needAction.filter(o => o.status === 'pending_confirmation').length;
-    const parts = [];
-    if (pending) parts.push(pending + ' pending');
-    if (failed) parts.push(failed + ' failed');
-    el.textContent = needAction.length + (needAction.length === 1 ? ' order needs' : ' orders need') + ' attention — ' + parts.join(', ');
+  const actionable = orders.filter(o => !['porched', 'shipped'].includes(o.status));
+  if (actionable.length > 0) {
+    const counts = {};
+    actionable.forEach(o => { counts[o.status] = (counts[o.status] || 0) + 1; });
+    const labels = { pending_confirmation: 'to pack', packed: 'to schedule', pickup_scheduled: 'to porch', label_failed: 'failed' };
+    const parts = Object.entries(counts).map(([s, n]) => `${n} ${labels[s] || s}`);
+    el.textContent = actionable.length + (actionable.length === 1 ? ' order needs' : ' orders need') + ' attention — ' + parts.join(', ');
     el.className = 'mb-6 px-5 py-3.5 rounded-lg font-medium text-sm fade-in border';
     el.style.background = '#ed893612';
     el.style.color = '#f6ad55';

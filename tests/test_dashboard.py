@@ -212,3 +212,42 @@ def test_retry_wrong_status(mock_print, data_dir, client):
     resp = client.post("/api/orders/11-11111-11111/retry")
     assert resp.status_code == 400
     mock_print.assert_not_called()
+
+
+def test_advance_order_through_flow(data_dir, client):
+    """POST /api/orders/{id}/advance walks through the fulfillment flow."""
+    oid = "22-22222-22222"
+
+    # pending_confirmation → packed
+    resp = client.post(f"/api/orders/{oid}/advance")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "packed"
+
+    # packed → pickup_scheduled
+    resp = client.post(f"/api/orders/{oid}/advance")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pickup_scheduled"
+
+    # pickup_scheduled → porched
+    resp = client.post(f"/api/orders/{oid}/advance")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "porched"
+
+    # porched → shipped
+    resp = client.post(f"/api/orders/{oid}/advance")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "shipped"
+
+    # shipped is terminal — can't advance
+    resp = client.post(f"/api/orders/{oid}/advance")
+    assert resp.status_code == 400
+
+    # Verify state.json was updated on disk
+    state = json.loads((data_dir / "orders" / oid / "state.json").read_text())
+    assert state["status"] == "shipped"
+
+
+def test_advance_rejects_failed_orders(data_dir, client):
+    """POST /api/orders/{id}/advance rejects label_failed orders (use retry instead)."""
+    resp = client.post("/api/orders/33-33333-33333/advance")
+    assert resp.status_code == 400
