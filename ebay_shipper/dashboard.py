@@ -36,6 +36,10 @@ def _read_orders(data_dir: Path) -> list[dict]:
             for i in order_data.get("lineItems", [])
         )
 
+        # Use directory mtime as the processed timestamp
+        mtime = order_dir.stat().st_mtime
+        processed_at = datetime.fromtimestamp(mtime, timezone.utc).isoformat()
+
         orders.append({
             "order_id": state.get("order_id", order_dir.name),
             "status": state.get("status", "unknown"),
@@ -45,6 +49,7 @@ def _read_orders(data_dir: Path) -> list[dict]:
             "buyer": order_data.get("buyer", {}).get("username", ""),
             "items": items,
             "total": order_data.get("pricingSummary", {}).get("total", {}).get("value", ""),
+            "processed_at": processed_at,
         })
 
     return orders

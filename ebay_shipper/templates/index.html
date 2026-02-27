@@ -104,6 +104,7 @@ tailwind.config = {
       <table class="w-full">
         <thead>
           <tr>
+            <th>Date</th>
             <th>Order</th>
             <th>Buyer</th>
             <th>Items</th>
@@ -166,6 +167,18 @@ function timeSince(ts) {
   return Math.floor(s / 60) + 'm ago';
 }
 
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const mo = d.toLocaleDateString('en-US', { month: 'short' });
+  const day = d.getDate();
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'p' : 'a';
+  const h12 = h % 12 || 12;
+  return `${mo} ${day} ${h12}:${m}${ampm}`;
+}
+
 function statusBadge(status) {
   const map = {
     shipped: ['Shipped', 'badge-shipped'],
@@ -226,6 +239,7 @@ function renderOrders(orders) {
 
   body.innerHTML = orders.map(o => `
     <tr>
+      <td class="text-xs text-zinc-500">${formatDate(o.processed_at)}</td>
       <td class="font-mono text-xs text-zinc-300">${o.order_id}</td>
       <td>${o.buyer || '—'}</td>
       <td class="text-zinc-400">${o.items || '—'}</td>
