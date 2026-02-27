@@ -187,7 +187,9 @@ function statusBadge(status) {
     packed: ['Packed', 'badge-pending'],
     pickup_scheduled: ['Scheduled', 'badge-pending'],
     porched: ['Porched', 'badge-shipped'],
-    shipped: ['Shipped', 'badge-shipped'],
+    in_transit: ['In Transit', 'badge-shipped'],
+    out_for_delivery: ['Out for Delivery', 'badge-shipped'],
+    delivered: ['Delivered', 'badge-shipped'],
     label_failed: ['Failed', 'badge-failed'],
   };
   const [label, cls] = map[status] || [status, ''];
@@ -272,7 +274,8 @@ function renderOrders(orders) {
 
 function renderBanner(orders) {
   const el = document.getElementById('banner');
-  const actionable = orders.filter(o => !['porched', 'shipped'].includes(o.status));
+  const done = ['porched', 'in_transit', 'out_for_delivery', 'delivered'];
+  const actionable = orders.filter(o => !done.includes(o.status));
   if (actionable.length > 0) {
     const counts = {};
     actionable.forEach(o => { counts[o.status] = (counts[o.status] || 0) + 1; });

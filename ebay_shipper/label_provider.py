@@ -290,3 +290,20 @@ class EasyPostProvider:
         except Exception:
             logger.exception("Failed to schedule USPS pickup")
             return None
+
+    def check_tracking(self, tracking_number: str) -> str | None:
+        """Check tracking status via EasyPost. Returns status string or None on error.
+
+        EasyPost statuses: pre_transit, in_transit, out_for_delivery, delivered,
+        return_to_sender, failure, unknown.
+        """
+        try:
+            tracker = self.client.tracker.create(
+                tracking_code=tracking_number,
+                carrier="USPS",
+            )
+            logger.debug("Tracking %s: %s", tracking_number, tracker.status)
+            return tracker.status
+        except Exception:
+            logger.exception("Failed to check tracking for %s", tracking_number)
+            return None

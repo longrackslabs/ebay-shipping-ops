@@ -233,21 +233,74 @@ def test_advance_order_through_flow(data_dir, client):
     assert resp.status_code == 200
     assert resp.json()["status"] == "porched"
 
-    # porched → shipped
+    # porched → in_transit
     resp = client.post(f"/api/orders/{oid}/advance")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "shipped"
+    assert resp.json()["status"] == "in_transit"
 
-    # shipped is terminal — can't advance
+    # in_transit → out_for_delivery
+    resp = client.post(f"/api/orders/{oid}/advance")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "out_for_delivery"
+
+    # out_for_delivery → delivered
+    resp = client.post(f"/api/orders/{oid}/advance")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "delivered"
+
+    # delivered is terminal — can't advance
     resp = client.post(f"/api/orders/{oid}/advance")
     assert resp.status_code == 400
 
     # Verify state.json was updated on disk
     state = json.loads((data_dir / "orders" / oid / "state.json").read_text())
-    assert state["status"] == "shipped"
+    assert state["status"] == "delivered"
 
 
 def test_advance_rejects_failed_orders(data_dir, client):
     """POST /api/orders/{id}/advance rejects label_failed orders (use retry instead)."""
     resp = client.post("/api/orders/33-33333-33333/advance")
     assert resp.status_code == 400
+
+
+def test_check_tracking_updates_porched_to_in_transit(tmp_path):
+    """check_tracking_updates auto-advances porched orders when USPS scans them."""
+    from unittest.mock import MagicMock
+    from ebay_shipper.main import check_tracking_updates
+
+    orders_dir = tmp_path / "orders"
+    order_dir = orders_dir / "44-44444-44444"
+    order_dir.mkdir(parents=True)
+    (order_dir / "state.json").write_text(json.dumps({
+        "order_id": "44-44444-44444",
+        "status": "porched",
+        "tracking_number": "9400136208303461675547",
+    }))
+
+    provider = MagicMock()
+    provider.check_tracking.return_value = "in_transit"
+
+    check_tracking_updates(orders_dir, provider)
+
+    state = json.loads((order_dir / "state.json").read_text())
+    assert state["status"] == "in_transit"
+
+
+def test_check_tracking_skips_non_porched(tmp_path):
+    """check_tracking_updates skips orders not in porched/tracking state."""
+    from unittest.mock import MagicMock
+    from ebay_shipper.main import check_tracking_updates
+
+    orders_dir = tmp_path / "orders"
+    order_dir = orders_dir / "55-55555-55555"
+    order_dir.mkdir(parents=True)
+    (order_dir / "state.json").write_text(json.dumps({
+        "order_id": "55-55555-55555",
+        "status": "packed",
+        "tracking_number": "9400136208303461675547",
+    }))
+
+    provider = MagicMock()
+    check_tracking_updates(orders_dir, provider)
+
+    provider.check_tracking.assert_not_called()

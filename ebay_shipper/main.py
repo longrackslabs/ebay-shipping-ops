@@ -334,6 +334,41 @@ def schedule_pickup_command(order_id: str | None, config: dict) -> bool:
         return False
 
 
+# EasyPost tracking statuses that mean USPS has the package
+TRACKING_ACTIVE_STATUSES = {"in_transit", "out_for_delivery", "delivered"}
+
+
+def check_tracking_updates(orders_dir: Path, label_provider):
+    """Check EasyPost tracking for porched orders, auto-update status from USPS."""
+    if not orders_dir.exists():
+        return
+    if not hasattr(label_provider, "check_tracking"):
+        return
+
+    for order_dir in orders_dir.iterdir():
+        state_file = order_dir / "state.json"
+        if not state_file.exists():
+            continue
+
+        state = json.loads(state_file.read_text())
+        current = state.get("status")
+
+        # Only check tracking for orders that are porched or already in a tracking state
+        if current not in ("porched", "in_transit", "out_for_delivery"):
+            continue
+
+        tracking = state.get("tracking_number")
+        if not tracking or tracking.startswith("STUB"):
+            continue
+
+        status = label_provider.check_tracking(tracking)
+        if status and status in TRACKING_ACTIVE_STATUSES and status != current:
+            state["status"] = status
+            state_file.write_text(json.dumps(state, indent=2))
+            logger.info("Order %s: %s → %s (tracking update)",
+                        state.get("order_id", order_dir.name), current, status)
+
+
 def main():
     """Main entry point."""
     setup_logging()
@@ -412,6 +447,9 @@ def main():
                 process_order(order, config, label_provider, output_dir, auth=auth)
             if not new_orders:
                 logger.debug("No new orders")
+
+            # Check tracking on porched orders — auto-advance when USPS scans
+            check_tracking_updates(output_dir, label_provider)
         except Exception:
             logger.exception("Error during poll cycle, retrying in %ds", ERROR_RETRY_INTERVAL)
             time.sleep(ERROR_RETRY_INTERVAL)

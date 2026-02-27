@@ -15,7 +15,12 @@ logger = logging.getLogger(__name__)
 STALE_LOG_SECONDS = 600  # 10 minutes — service polls every 5 min
 
 # Fulfillment flow: each state advances to the next
-FLOW = ["pending_confirmation", "packed", "pickup_scheduled", "porched", "shipped"]
+# Manual steps: printed → packed → pickup_scheduled → porched
+# Auto steps (tracking poll): porched → in_transit → out_for_delivery → delivered
+FLOW = [
+    "pending_confirmation", "packed", "pickup_scheduled", "porched",
+    "in_transit", "out_for_delivery", "delivered",
+]
 
 
 def _read_orders(data_dir: Path) -> list[dict]:
