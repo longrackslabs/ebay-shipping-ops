@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Longracks Labs — Shipping Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['DM Sans', 'sans-serif'],
+      },
+      colors: {
+        surface: { 50: '#1a1a1e', 100: '#212126', 200: '#2a2a30', 300: '#35353d' },
+        amber: { 400: '#f6ad55', 500: '#ed8936' },
+        emerald: { 400: '#68d391', 500: '#48bb78' },
+        rose: { 400: '#fc8181', 500: '#f56565' },
+      }
+    }
+  }
+}
+</script>
+<style>
+  body { background: #111114; color: #d4d4d8; }
+  .grain { position: fixed; inset: 0; pointer-events: none; opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .scanline { position: fixed; inset: 0; pointer-events: none; opacity: 0.015;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px);
+  }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .status-dot.ok { background: #48bb78; box-shadow: 0 0 6px #48bb7866; }
+  .status-dot.down { background: #f56565; box-shadow: 0 0 6px #f5656566; }
+  .badge { padding: 2px 10px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em; display: inline-block; }
+  .badge-shipped { background: #48bb7822; color: #68d391; border: 1px solid #48bb7833; }
+  .badge-pending { background: #ed893622; color: #f6ad55; border: 1px solid #ed893633; }
+  .badge-failed { background: #f5656522; color: #fc8181; border: 1px solid #f5656533; }
+  .btn { padding: 4px 14px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+    cursor: pointer; transition: all 0.15s; border: 1px solid transparent; }
+  .btn-amber { background: #ed893622; color: #f6ad55; border-color: #ed893644; }
+  .btn-amber:hover { background: #ed893644; }
+  .btn-rose { background: #f5656522; color: #fc8181; border-color: #f5656544; }
+  .btn-rose:hover { background: #f5656544; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 6px;
+    font-size: 0.85rem; font-weight: 500; z-index: 50; transform: translateY(80px);
+    opacity: 0; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast-ok { background: #48bb7822; color: #68d391; border: 1px solid #48bb7844; }
+  .toast-err { background: #f5656522; color: #fc8181; border: 1px solid #f5656544; }
+  .log-line { font-size: 0.72rem; line-height: 1.6; opacity: 0.7; }
+  .log-line:last-child { opacity: 1; }
+  table { border-collapse: separate; border-spacing: 0; }
+  th { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: #71717a;
+    font-weight: 600; padding: 10px 16px; text-align: left; border-bottom: 1px solid #2a2a30; }
+  td { padding: 12px 16px; border-bottom: 1px solid #1e1e22; font-size: 0.85rem; }
+  tr:hover td { background: #1a1a1e; }
+  a.track-link { color: #93c5fd; text-decoration: none; font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem; }
+  a.track-link:hover { color: #bfdbfe; text-decoration: underline; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+  .section-border { border: 1px solid #2a2a30; border-radius: 8px; }
+</style>
+</head>
+<body class="font-sans min-h-screen">
+<div class="grain"></div>
+<div class="scanline"></div>
+
+<div class="max-w-6xl mx-auto px-4 sm:px-6 py-6 relative z-10">
+
+  <!-- Header -->
+  <header class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+      <div class="text-xs font-mono tracking-[0.2em] text-zinc-500 uppercase">Shipping Ops</div>
+      <div class="w-px h-4 bg-zinc-700"></div>
+      <h1 class="text-lg font-bold tracking-tight text-zinc-100">LONGRACKS LABS</h1>
+    </div>
+    <div class="flex items-center gap-4">
+      <div class="text-xs text-zinc-500 font-mono" id="last-updated"></div>
+      <div class="flex items-center gap-2">
+        <span class="status-dot" id="status-dot"></span>
+        <span class="text-xs font-medium" id="status-text"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Attention Banner -->
+  <div id="banner" class="mb-6 px-5 py-3.5 rounded-lg font-medium text-sm fade-in"></div>
+
+  <!-- Orders Table -->
+  <div class="section-border overflow-hidden mb-6 fade-in" style="animation-delay: 0.1s">
+    <div class="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+      <h2 class="text-xs font-mono tracking-[0.15em] text-zinc-400 uppercase">Orders</h2>
+      <span class="text-xs text-zinc-600 font-mono" id="order-count"></span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Buyer</th>
+            <th>Items</th>
+            <th class="text-right">Total</th>
+            <th>Status</th>
+            <th>Tracking</th>
+            <th class="text-right">Label</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="orders-body"></tbody>
+      </table>
+    </div>
+    <div id="no-orders" class="hidden px-5 py-8 text-center text-zinc-600 text-sm">No orders yet</div>
+  </div>
+
+  <!-- Bottom row: Pickup + Log side by side -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6 fade-in" style="animation-delay: 0.2s">
+
+    <!-- Pickup -->
+    <div class="section-border">
+      <div class="px-5 py-3 border-b border-zinc-800">
+        <h2 class="text-xs font-mono tracking-[0.15em] text-zinc-400 uppercase">Pickup</h2>
+      </div>
+      <div class="px-5 py-4" id="pickup-content">
+        <span class="text-zinc-600 text-sm">Loading...</span>
+      </div>
+    </div>
+
+    <!-- Service Log -->
+    <div class="section-border md:col-span-2">
+      <div class="px-5 py-3 border-b border-zinc-800">
+        <h2 class="text-xs font-mono tracking-[0.15em] text-zinc-400 uppercase">Service Log</h2>
+      </div>
+      <div class="px-5 py-3 max-h-48 overflow-y-auto" id="log-content">
+        <span class="text-zinc-600 text-sm">Loading...</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<script>
+const REFRESH_MS = 30000;
+let lastRefresh = Date.now();
+
+function showToast(msg, ok) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + (ok ? 'toast-ok' : 'toast-err') + ' show';
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function timeSince(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 5) return 'just now';
+  if (s < 60) return s + 's ago';
+  return Math.floor(s / 60) + 'm ago';
+}
+
+function statusBadge(status) {
+  const map = {
+    shipped: ['Shipped', 'badge-shipped'],
+    pending_confirmation: ['Pending', 'badge-pending'],
+    label_failed: ['Failed', 'badge-failed'],
+  };
+  const [label, cls] = map[status] || [status, ''];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function trackingLink(tn) {
+  if (!tn) return '<span class="text-zinc-600">—</span>';
+  const short = '...' + tn.slice(-6);
+  return `<a class="track-link" href="https://tools.usps.com/go/TrackConfirmAction?tLabels=${tn}" target="_blank" rel="noopener">${short}</a>`;
+}
+
+function actionBtn(order) {
+  if (order.status === 'pending_confirmation') {
+    return `<button class="btn btn-amber" onclick="doAction('${order.order_id}','reprint')">Reprint</button>`;
+  }
+  if (order.status === 'label_failed') {
+    return `<button class="btn btn-rose" onclick="doAction('${order.order_id}','retry')">Retry</button>`;
+  }
+  return '';
+}
+
+async function doAction(id, action) {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = action === 'reprint' ? 'Printing...' : 'Retrying...';
+  try {
+    const r = await fetch(`/api/orders/${id}/${action}`, { method: 'POST' });
+    const d = await r.json();
+    if (r.ok && d.success) {
+      showToast(action === 'reprint' ? 'Sent to printer' : 'Retry queued', true);
+    } else {
+      showToast(d.detail || 'Action failed', false);
+    }
+  } catch (e) {
+    showToast('Network error', false);
+  }
+  setTimeout(refresh, 1000);
+}
+
+function renderOrders(orders) {
+  const body = document.getElementById('orders-body');
+  const noOrders = document.getElementById('no-orders');
+  const count = document.getElementById('order-count');
+
+  if (!orders.length) {
+    body.innerHTML = '';
+    noOrders.classList.remove('hidden');
+    count.textContent = '';
+    return;
+  }
+  noOrders.classList.add('hidden');
+  count.textContent = orders.length + ' total';
+
+  body.innerHTML = orders.map(o => `
+    <tr>
+      <td class="font-mono text-xs text-zinc-300">${o.order_id}</td>
+      <td>${o.buyer || '—'}</td>
+      <td class="text-zinc-400">${o.items || '—'}</td>
+      <td class="text-right font-mono">${o.total ? '$' + o.total : '—'}</td>
+      <td>${statusBadge(o.status)}</td>
+      <td>${trackingLink(o.tracking_number)}</td>
+      <td class="text-right font-mono text-zinc-400">${o.rate ? '$' + o.rate : '—'}</td>
+      <td class="text-right">${actionBtn(o)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderBanner(orders) {
+  const el = document.getElementById('banner');
+  const needAction = orders.filter(o => o.status === 'pending_confirmation' || o.status === 'label_failed');
+  if (needAction.length > 0) {
+    const failed = needAction.filter(o => o.status === 'label_failed').length;
+    const pending = needAction.filter(o => o.status === 'pending_confirmation').length;
+    const parts = [];
+    if (pending) parts.push(pending + ' pending');
+    if (failed) parts.push(failed + ' failed');
+    el.textContent = needAction.length + (needAction.length === 1 ? ' order needs' : ' orders need') + ' attention — ' + parts.join(', ');
+    el.className = 'mb-6 px-5 py-3.5 rounded-lg font-medium text-sm fade-in border';
+    el.style.background = '#ed893612';
+    el.style.color = '#f6ad55';
+    el.style.borderColor = '#ed893633';
+  } else {
+    el.textContent = 'All caught up';
+    el.className = 'mb-6 px-5 py-3.5 rounded-lg font-medium text-sm fade-in border';
+    el.style.background = '#48bb7812';
+    el.style.color = '#68d391';
+    el.style.borderColor = '#48bb7833';
+  }
+}
+
+function renderHealth(health) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  if (health.service_ok) {
+    dot.className = 'status-dot ok';
+    txt.textContent = 'Running';
+    txt.style.color = '#68d391';
+  } else {
+    dot.className = 'status-dot down';
+    txt.textContent = 'Down';
+    txt.style.color = '#fc8181';
+  }
+
+  const log = document.getElementById('log-content');
+  if (health.log_lines && health.log_lines.length) {
+    log.innerHTML = health.log_lines.map(l =>
+      `<div class="log-line font-mono whitespace-pre">${l.replace(/</g, '&lt;')}</div>`
+    ).join('');
+    log.scrollTop = log.scrollHeight;
+  } else {
+    log.innerHTML = '<span class="text-zinc-600 text-sm">No log data</span>';
+  }
+}
+
+function renderPickup(pickup) {
+  const el = document.getElementById('pickup-content');
+  if (pickup && pickup.status === 'scheduled') {
+    el.innerHTML = `
+      <div class="flex items-center gap-2 mb-2">
+        <span class="status-dot ok"></span>
+        <span class="text-sm font-medium text-emerald-400">Scheduled</span>
+      </div>
+      <div class="text-sm text-zinc-300">${pickup.pickup_date}</div>
+      <div class="text-xs text-zinc-500 font-mono mt-1">${pickup.confirmation || ''}</div>
+    `;
+  } else {
+    el.innerHTML = '<span class="text-zinc-500 text-sm">No pickup scheduled</span>';
+  }
+}
+
+async function refresh() {
+  try {
+    const [orders, pickup, health] = await Promise.all([
+      fetch('/api/orders').then(r => r.json()),
+      fetch('/api/pickup').then(r => r.json()),
+      fetch('/api/health').then(r => r.json()),
+    ]);
+    renderOrders(orders);
+    renderBanner(orders);
+    renderHealth(health);
+    renderPickup(pickup);
+    lastRefresh = Date.now();
+  } catch (e) {
+    console.error('Refresh failed:', e);
+  }
+}
+
+function updateClock() {
+  document.getElementById('last-updated').textContent = 'Updated ' + timeSince(lastRefresh);
+}
+
+refresh();
+setInterval(refresh, REFRESH_MS);
+setInterval(updateClock, 1000);
+</script>
+</body>
+</html>

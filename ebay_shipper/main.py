@@ -375,6 +375,15 @@ def main():
         success = schedule_pickup_command(order_id, config)
         sys.exit(0 if success else 1)
 
+    if len(sys.argv) >= 2 and sys.argv[1] == "dashboard":
+        import uvicorn
+        from ebay_shipper.dashboard import create_app
+        port = int(os.getenv("DASHBOARD_PORT", "8080"))
+        app = create_app(DATA_DIR, config)
+        logger.info("Starting dashboard on port %d", port)
+        uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+        sys.exit(0)
+
     # Service mode: poll for orders
     auth = EbayAuth(
         client_id=config["ebay_client_id"],
