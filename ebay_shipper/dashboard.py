@@ -22,6 +22,9 @@ FLOW = [
     "in_transit", "out_for_delivery", "delivered",
 ]
 
+# Terminal states that can happen from any point — not part of the happy path
+TERMINAL_STATES = {"delivered", "cancelled", "lost", "return_to_sender"}
+
 
 def _read_orders(data_dir: Path) -> list[dict]:
     """Read all orders from data dir, merging state.json + order.json."""
@@ -138,6 +141,24 @@ def create_app(data_dir: Path, config: dict | None = None) -> FastAPI:
             raise HTTPException(400, f"Order status is '{state['status']}', not label_failed")
 
         return {"success": True, "message": "Order queued for retry"}
+
+    @app.post("/api/orders/{order_id}/cancel")
+    def cancel_order(order_id: str):
+        order_dir = data_dir / "orders" / order_id
+        state_file = order_dir / "state.json"
+        if not state_file.exists():
+            raise HTTPException(404, f"Order {order_id} not found")
+
+        state = json.loads(state_file.read_text())
+        if state["status"] in TERMINAL_STATES:
+            raise HTTPException(400, f"Order is already at terminal status '{state['status']}'")
+
+        previous = state["status"]
+        state["status"] = "cancelled"
+        state_file.write_text(json.dumps(state, indent=2))
+        logger.info("Order %s: %s → cancelled", order_id, previous)
+
+        return {"success": True, "previous": previous, "status": "cancelled"}
 
     @app.post("/api/orders/{order_id}/advance")
     def advance_order(order_id: str):

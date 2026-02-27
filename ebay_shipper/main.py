@@ -334,8 +334,17 @@ def schedule_pickup_command(order_id: str | None, config: dict) -> bool:
         return False
 
 
-# EasyPost tracking statuses that mean USPS has the package
-TRACKING_ACTIVE_STATUSES = {"in_transit", "out_for_delivery", "delivered"}
+# Map EasyPost tracking statuses to our flow states
+TRACKING_STATUS_MAP = {
+    "in_transit": "in_transit",
+    "out_for_delivery": "out_for_delivery",
+    "delivered": "delivered",
+    "return_to_sender": "return_to_sender",
+    "failure": "lost",
+}
+
+# Statuses where we should keep checking tracking
+TRACKING_CHECK_STATUSES = {"porched", "in_transit", "out_for_delivery"}
 
 
 def check_tracking_updates(orders_dir: Path, label_provider):
@@ -354,19 +363,20 @@ def check_tracking_updates(orders_dir: Path, label_provider):
         current = state.get("status")
 
         # Only check tracking for orders that are porched or already in a tracking state
-        if current not in ("porched", "in_transit", "out_for_delivery"):
+        if current not in TRACKING_CHECK_STATUSES:
             continue
 
         tracking = state.get("tracking_number")
         if not tracking or tracking.startswith("STUB"):
             continue
 
-        status = label_provider.check_tracking(tracking)
-        if status and status in TRACKING_ACTIVE_STATUSES and status != current:
-            state["status"] = status
+        easypost_status = label_provider.check_tracking(tracking)
+        mapped = TRACKING_STATUS_MAP.get(easypost_status)
+        if mapped and mapped != current:
+            state["status"] = mapped
             state_file.write_text(json.dumps(state, indent=2))
             logger.info("Order %s: %s → %s (tracking update)",
-                        state.get("order_id", order_dir.name), current, status)
+                        state.get("order_id", order_dir.name), current, mapped)
 
 
 def main():

@@ -263,6 +263,73 @@ def test_advance_rejects_failed_orders(data_dir, client):
     assert resp.status_code == 400
 
 
+def test_cancel_order(data_dir, client):
+    """POST /api/orders/{id}/cancel sets status to cancelled."""
+    resp = client.post("/api/orders/22-22222-22222/cancel")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+
+    state = json.loads((data_dir / "orders" / "22-22222-22222" / "state.json").read_text())
+    assert state["status"] == "cancelled"
+
+
+def test_cancel_rejects_terminal(data_dir, client):
+    """POST /api/orders/{id}/cancel rejects already-delivered orders."""
+    # First advance to delivered
+    oid = "22-22222-22222"
+    for _ in range(6):
+        client.post(f"/api/orders/{oid}/advance")
+
+    resp = client.post(f"/api/orders/{oid}/cancel")
+    assert resp.status_code == 400
+
+
+def test_check_tracking_maps_failure_to_lost(tmp_path):
+    """check_tracking_updates maps EasyPost 'failure' to 'lost'."""
+    from unittest.mock import MagicMock
+    from ebay_shipper.main import check_tracking_updates
+
+    orders_dir = tmp_path / "orders"
+    order_dir = orders_dir / "66-66666-66666"
+    order_dir.mkdir(parents=True)
+    (order_dir / "state.json").write_text(json.dumps({
+        "order_id": "66-66666-66666",
+        "status": "in_transit",
+        "tracking_number": "9400136208303461675547",
+    }))
+
+    provider = MagicMock()
+    provider.check_tracking.return_value = "failure"
+
+    check_tracking_updates(orders_dir, provider)
+
+    state = json.loads((order_dir / "state.json").read_text())
+    assert state["status"] == "lost"
+
+
+def test_check_tracking_maps_return_to_sender(tmp_path):
+    """check_tracking_updates maps EasyPost 'return_to_sender' correctly."""
+    from unittest.mock import MagicMock
+    from ebay_shipper.main import check_tracking_updates
+
+    orders_dir = tmp_path / "orders"
+    order_dir = orders_dir / "77-77777-77777"
+    order_dir.mkdir(parents=True)
+    (order_dir / "state.json").write_text(json.dumps({
+        "order_id": "77-77777-77777",
+        "status": "in_transit",
+        "tracking_number": "9400136208303461675547",
+    }))
+
+    provider = MagicMock()
+    provider.check_tracking.return_value = "return_to_sender"
+
+    check_tracking_updates(orders_dir, provider)
+
+    state = json.loads((order_dir / "state.json").read_text())
+    assert state["status"] == "return_to_sender"
+
+
 def test_check_tracking_updates_porched_to_in_transit(tmp_path):
     """check_tracking_updates auto-advances porched orders when USPS scans them."""
     from unittest.mock import MagicMock

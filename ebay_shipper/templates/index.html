@@ -41,6 +41,7 @@ tailwind.config = {
   .badge-shipped { background: #48bb7822; color: #68d391; border: 1px solid #48bb7833; }
   .badge-pending { background: #ed893622; color: #f6ad55; border: 1px solid #ed893633; }
   .badge-failed { background: #f5656522; color: #fc8181; border: 1px solid #f5656533; }
+  .badge-terminal { background: #71717a22; color: #a1a1aa; border: 1px solid #71717a33; }
   .btn { padding: 4px 14px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
     cursor: pointer; transition: all 0.15s; border: 1px solid transparent; }
   .btn-amber { background: #ed893622; color: #f6ad55; border-color: #ed893644; }
@@ -190,6 +191,9 @@ function statusBadge(status) {
     in_transit: ['In Transit', 'badge-shipped'],
     out_for_delivery: ['Out for Delivery', 'badge-shipped'],
     delivered: ['Delivered', 'badge-shipped'],
+    cancelled: ['Cancelled', 'badge-terminal'],
+    lost: ['Lost', 'badge-failed'],
+    return_to_sender: ['Returned', 'badge-failed'],
     label_failed: ['Failed', 'badge-failed'],
   };
   const [label, cls] = map[status] || [status, ''];
@@ -274,7 +278,7 @@ function renderOrders(orders) {
 
 function renderBanner(orders) {
   const el = document.getElementById('banner');
-  const done = ['porched', 'in_transit', 'out_for_delivery', 'delivered'];
+  const done = ['porched', 'in_transit', 'out_for_delivery', 'delivered', 'cancelled', 'lost', 'return_to_sender'];
   const actionable = orders.filter(o => !done.includes(o.status));
   if (actionable.length > 0) {
     const counts = {};
