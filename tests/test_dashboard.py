@@ -185,9 +185,9 @@ def test_reprint_order(mock_print, data_dir, client):
 
 
 @patch("ebay_shipper.dashboard.print_file")
-def test_reprint_wrong_status(mock_print, data_dir, client):
-    """POST /api/orders/{id}/reprint rejects non-pending orders."""
-    resp = client.post("/api/orders/11-11111-11111/reprint")
+def test_reprint_no_label(mock_print, data_dir, client):
+    """POST /api/orders/{id}/reprint rejects orders with no label."""
+    resp = client.post("/api/orders/33-33333-33333/reprint")
     assert resp.status_code == 400
     mock_print.assert_not_called()
 

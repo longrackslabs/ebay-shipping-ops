@@ -113,8 +113,8 @@ def create_app(data_dir: Path, config: dict | None = None) -> FastAPI:
             raise HTTPException(404, f"Order {order_id} not found")
 
         state = json.loads(state_file.read_text())
-        if state["status"] != "pending_confirmation":
-            raise HTTPException(400, f"Order status is '{state['status']}', not pending_confirmation")
+        if not state.get("label"):
+            raise HTTPException(400, f"Order {order_id} has no label to reprint")
 
         packing_ok = print_file(Path(state["packing_list"]), printer_name)
         label_ok = print_file(Path(state["label"]), printer_name)

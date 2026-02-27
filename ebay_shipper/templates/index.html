@@ -47,6 +47,8 @@ tailwind.config = {
   .btn-amber:hover { background: #ed893644; }
   .btn-rose { background: #f5656522; color: #fc8181; border-color: #f5656544; }
   .btn-rose:hover { background: #f5656544; }
+  .btn-muted { background: #27272a; color: #a1a1aa; border-color: #3f3f46; }
+  .btn-muted:hover { background: #3f3f46; color: #d4d4d8; }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 6px;
     font-size: 0.85rem; font-weight: 500; z-index: 50; transform: translateY(80px);
@@ -199,18 +201,25 @@ function trackingLink(tn) {
 }
 
 function actionBtn(order) {
+  const btns = [];
   const flow = {
     pending_confirmation: 'Pack',
     packed: 'Schedule',
     pickup_scheduled: 'Porch',
   };
+  // Reprint — available whenever there's a label
+  if (order.tracking_number && order.tracking_number !== 'STUB-0000000000') {
+    btns.push(`<button class="btn btn-muted" onclick="doAction('${order.order_id}','reprint')">Reprint</button>`);
+  }
+  // Next step in the flow
   if (flow[order.status]) {
-    return `<button class="btn btn-amber" onclick="doAction('${order.order_id}','advance')">${flow[order.status]}</button>`;
+    btns.push(`<button class="btn btn-amber" onclick="doAction('${order.order_id}','advance')">${flow[order.status]}</button>`);
   }
+  // Retry for failed labels
   if (order.status === 'label_failed') {
-    return `<button class="btn btn-rose" onclick="doAction('${order.order_id}','retry')">Retry</button>`;
+    btns.push(`<button class="btn btn-rose" onclick="doAction('${order.order_id}','retry')">Retry</button>`);
   }
-  return '';
+  return btns.join(' ');
 }
 
 async function doAction(id, action) {
