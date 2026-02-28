@@ -344,7 +344,7 @@ TRACKING_STATUS_MAP = {
 }
 
 # Statuses where we should keep checking tracking
-TRACKING_CHECK_STATUSES = {"porched", "in_transit", "out_for_delivery"}
+TRACKING_CHECK_STATUSES = {"pickup_scheduled", "in_transit", "out_for_delivery"}
 
 
 def check_tracking_updates(orders_dir: Path, label_provider):
@@ -370,13 +370,23 @@ def check_tracking_updates(orders_dir: Path, label_provider):
         if not tracking or tracking.startswith("STUB"):
             continue
 
-        easypost_status = label_provider.check_tracking(tracking)
+        result = label_provider.check_tracking(tracking)
+        if not result:
+            continue
+        easypost_status = result["status"]
+        detail = result.get("detail")
         mapped = TRACKING_STATUS_MAP.get(easypost_status)
-        if mapped and mapped != current:
-            state["status"] = mapped
+        changed = mapped and mapped != current
+        detail_changed = detail and detail != state.get("tracking_detail")
+        if changed or detail_changed:
+            if mapped and mapped != current:
+                state["status"] = mapped
+            if detail:
+                state["tracking_detail"] = detail
             state_file.write_text(json.dumps(state, indent=2))
-            logger.info("Order %s: %s → %s (tracking update)",
-                        state.get("order_id", order_dir.name), current, mapped)
+            logger.info("Order %s: %s → %s (%s)",
+                        state.get("order_id", order_dir.name), current,
+                        mapped or current, detail or "tracking update")
 
 
 def main():

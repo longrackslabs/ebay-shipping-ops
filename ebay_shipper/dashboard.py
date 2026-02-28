@@ -31,14 +31,8 @@ STATES = {
         "needs_attention": True, "attention_label": "to schedule",
     },
     "pickup_scheduled": {
-        "label": "Scheduled", "badge": "pending",
-        "next": "porched", "advance_label": "Porch",
-        "actions": ["reprint", "advance", "cancel"],
-        "needs_attention": True, "attention_label": "to porch",
-    },
-    "porched": {
-        "label": "Porched", "badge": "shipped",
-        "next": None, "actions": [],
+        "label": "Scheduled", "badge": "shipped",
+        "next": None, "actions": ["reprint", "cancel"],
         "needs_attention": False,
     },
     "in_transit": {
@@ -113,6 +107,7 @@ def _read_orders(data_dir: Path) -> list[dict]:
             "tracking_number": state.get("tracking_number", ""),
             "rate": state.get("rate", ""),
             "shipment_id": state.get("shipment_id", ""),
+            "tracking_detail": state.get("tracking_detail", ""),
             "buyer": order_data.get("buyer", {}).get("username", ""),
             "items": items,
             "total": order_data.get("pricingSummary", {}).get("total", {}).get("value", ""),

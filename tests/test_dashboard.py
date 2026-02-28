@@ -228,18 +228,13 @@ def test_advance_order_through_manual_flow(data_dir, client):
     assert resp.status_code == 200
     assert resp.json()["status"] == "pickup_scheduled"
 
-    # pickup_scheduled → porched
-    resp = client.post(f"/api/orders/{oid}/advance")
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "porched"
-
-    # porched has no manual advance — tracking poll handles the rest
+    # pickup_scheduled has no manual advance — tracking poll handles the rest
     resp = client.post(f"/api/orders/{oid}/advance")
     assert resp.status_code == 400
 
     # Verify state.json was updated on disk
     state = json.loads((data_dir / "orders" / oid / "state.json").read_text())
-    assert state["status"] == "porched"
+    assert state["status"] == "pickup_scheduled"
 
 
 def test_advance_rejects_failed_orders(data_dir, client):
@@ -294,12 +289,13 @@ def test_check_tracking_maps_failure_to_lost(tmp_path):
     }))
 
     provider = MagicMock()
-    provider.check_tracking.return_value = "failure"
+    provider.check_tracking.return_value = {"status": "failure", "detail": "Package lost"}
 
     check_tracking_updates(orders_dir, provider)
 
     state = json.loads((order_dir / "state.json").read_text())
     assert state["status"] == "lost"
+    assert state["tracking_detail"] == "Package lost"
 
 
 def test_check_tracking_maps_return_to_sender(tmp_path):
@@ -317,16 +313,17 @@ def test_check_tracking_maps_return_to_sender(tmp_path):
     }))
 
     provider = MagicMock()
-    provider.check_tracking.return_value = "return_to_sender"
+    provider.check_tracking.return_value = {"status": "return_to_sender", "detail": "Returned to sender"}
 
     check_tracking_updates(orders_dir, provider)
 
     state = json.loads((order_dir / "state.json").read_text())
     assert state["status"] == "return_to_sender"
+    assert state["tracking_detail"] == "Returned to sender"
 
 
-def test_check_tracking_updates_porched_to_in_transit(tmp_path):
-    """check_tracking_updates auto-advances porched orders when USPS scans them."""
+def test_check_tracking_updates_scheduled_to_in_transit(tmp_path):
+    """check_tracking_updates auto-advances pickup_scheduled orders when USPS scans them."""
     from unittest.mock import MagicMock
     from ebay_shipper.main import check_tracking_updates
 
@@ -335,17 +332,18 @@ def test_check_tracking_updates_porched_to_in_transit(tmp_path):
     order_dir.mkdir(parents=True)
     (order_dir / "state.json").write_text(json.dumps({
         "order_id": "44-44444-44444",
-        "status": "porched",
+        "status": "pickup_scheduled",
         "tracking_number": "9400136208303461675547",
     }))
 
     provider = MagicMock()
-    provider.check_tracking.return_value = "in_transit"
+    provider.check_tracking.return_value = {"status": "in_transit", "detail": "Accepted at USPS Origin Facility"}
 
     check_tracking_updates(orders_dir, provider)
 
     state = json.loads((order_dir / "state.json").read_text())
     assert state["status"] == "in_transit"
+    assert state["tracking_detail"] == "Accepted at USPS Origin Facility"
 
 
 def test_check_tracking_skips_non_porched(tmp_path):

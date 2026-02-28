@@ -291,8 +291,11 @@ class EasyPostProvider:
             logger.exception("Failed to schedule USPS pickup")
             return None
 
-    def check_tracking(self, tracking_number: str) -> str | None:
-        """Check tracking status via EasyPost. Returns status string or None on error.
+    def check_tracking(self, tracking_number: str) -> dict | None:
+        """Check tracking status via EasyPost.
+
+        Returns dict with 'status' and 'detail' (latest event message),
+        or None on error.
 
         EasyPost statuses: pre_transit, in_transit, out_for_delivery, delivered,
         return_to_sender, failure, unknown.
@@ -303,7 +306,11 @@ class EasyPostProvider:
                 carrier="USPS",
             )
             logger.debug("Tracking %s: %s", tracking_number, tracker.status)
-            return tracker.status
+            detail = None
+            if tracker.tracking_details:
+                latest = tracker.tracking_details[-1]
+                detail = latest.message
+            return {"status": tracker.status, "detail": detail}
         except Exception:
             logger.exception("Failed to check tracking for %s", tracking_number)
             return None
