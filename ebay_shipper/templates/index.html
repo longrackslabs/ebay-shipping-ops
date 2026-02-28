@@ -59,9 +59,13 @@ tailwind.config = {
   .toast-err { background: #f5656522; color: #fc8181; border: 1px solid #f5656544; }
   .log-line { font-size: 0.72rem; line-height: 1.6; opacity: 0.7; }
   .log-line:last-child { opacity: 1; }
-  table { border-collapse: separate; border-spacing: 0; }
+  table { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
   th { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: #71717a;
-    font-weight: 600; padding: 10px 16px; text-align: left; border-bottom: 1px solid #2a2a30; }
+    font-weight: 600; padding: 10px 16px; text-align: left; border-bottom: 1px solid #2a2a30;
+    position: relative; }
+  th .col-resize { position: absolute; right: 0; top: 4px; bottom: 4px; width: 3px;
+    cursor: col-resize; background: #2a2a30; border-radius: 2px; }
+  th .col-resize:hover, th .col-resize.active { background: #f6ad55; }
   td { padding: 12px 16px; border-bottom: 1px solid #1e1e22; font-size: 0.85rem; }
   tr:hover td { background: #1a1a1e; }
   a.track-link { color: #93c5fd; text-decoration: none; font-family: 'JetBrains Mono', monospace;
@@ -385,10 +389,31 @@ function updateClock() {
   document.getElementById('last-updated').textContent = 'Updated ' + timeSince(lastRefresh);
 }
 
+// Column resize
+function initResize() {
+  document.querySelectorAll('table th').forEach(th => {
+    if (th.querySelector('.col-resize')) return;
+    const handle = document.createElement('div');
+    handle.className = 'col-resize';
+    th.appendChild(handle);
+    let startX, startW;
+    handle.addEventListener('mousedown', e => {
+      startX = e.pageX;
+      startW = th.offsetWidth;
+      handle.classList.add('active');
+      const onMove = e2 => { th.style.width = (startW + e2.pageX - startX) + 'px'; };
+      const onUp = () => { handle.classList.remove('active'); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      e.preventDefault();
+    });
+  });
+}
+
 // Load states once on init, then start refreshing
 fetch('/api/states').then(r => r.json()).then(s => {
   STATES = s;
-  refresh();
+  refresh().then(initResize);
   setInterval(refresh, REFRESH_MS);
   setInterval(updateClock, 1000);
 });
