@@ -16,9 +16,11 @@ If label purchase fails, an error label prints on the Rollo and the order is sav
 
 A web dashboard at `http://shipping-ops.local:8080` tracks orders through fulfillment states that eBay doesn't:
 
-**Printed** → **Packed** → **Pickup Scheduled** → **Porched** → *In Transit* → *Delivered*
+**Printed** → **Packed** → **Pickup Scheduled** → *In Transit* → *Delivered*
 
 The italic states update automatically via EasyPost tracking. Mobile-friendly card layout for checking status from your phone.
+
+![Dashboard](docs/dashboard.png)
 
 ## Setup
 
