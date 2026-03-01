@@ -16,6 +16,21 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+PACIFIC = ZoneInfo("America/Los_Angeles")
+
+
+def next_pickup_date() -> str:
+    """Return the next valid USPS pickup date (YYYY-MM-DD).
+
+    Tomorrow, unless tomorrow is Sunday — then Monday.
+    """
+    now = datetime.now(PACIFIC)
+    tomorrow = now + timedelta(days=1)
+    # Sunday = 6 in weekday()
+    if tomorrow.weekday() == 6:
+        tomorrow += timedelta(days=1)
+    return tomorrow.strftime("%Y-%m-%d")
+
 
 @dataclass
 class ShipFromAddress:
@@ -229,10 +244,8 @@ class EasyPostProvider:
         Skips if a pickup is already scheduled for tomorrow. Returns the
         pickup confirmation or None if skipped/failed.
         """
-        pacific = ZoneInfo("America/Los_Angeles")
-        now = datetime.now(pacific)
-        tomorrow = now + timedelta(days=1)
-        pickup_date = tomorrow.strftime("%Y-%m-%d")
+        pickup_date = next_pickup_date()
+        pacific = PACIFIC
 
         # Check if we already have a pickup scheduled for tomorrow
         state = _load_pickup_state(data_dir)
@@ -242,8 +255,9 @@ class EasyPostProvider:
             return state.get("confirmation")
 
         # Schedule pickup window: 8am-12pm Pacific (handles PST/PDT automatically)
-        min_dt = tomorrow.replace(hour=8, minute=0, second=0, microsecond=0).isoformat()
-        max_dt = tomorrow.replace(hour=12, minute=0, second=0, microsecond=0).isoformat()
+        pickup_day = datetime.strptime(pickup_date, "%Y-%m-%d").replace(tzinfo=pacific)
+        min_dt = pickup_day.replace(hour=8, minute=0, second=0, microsecond=0).isoformat()
+        max_dt = pickup_day.replace(hour=12, minute=0, second=0, microsecond=0).isoformat()
 
         try:
             address = {

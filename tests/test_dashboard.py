@@ -2,10 +2,24 @@
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+
+
+TEST_CONFIG = {
+    "easypost_api_key": "EZTK_test_key",
+    "from_name": "George Peden",
+    "from_street": "1994 NW 129th Pl",
+    "from_city": "Portland",
+    "from_state": "OR",
+    "from_zip": "97229",
+    "from_phone": "5033494247",
+    "from_company": "Longracks Labs",
+    "pickup_instructions": "Packages in bin on front porch",
+    "printer_name": "Label_Printer",
+}
 
 
 @pytest.fixture
@@ -86,7 +100,7 @@ def data_dir(tmp_path):
 def client(data_dir):
     """Create a test client with the temp data dir."""
     from ebay_shipper.dashboard import create_app
-    app = create_app(data_dir)
+    app = create_app(data_dir, TEST_CONFIG)
     return TestClient(app)
 
 
@@ -214,8 +228,13 @@ def test_retry_wrong_status(mock_print, data_dir, client):
     mock_print.assert_not_called()
 
 
-def test_advance_order_through_manual_flow(data_dir, client):
+@patch("ebay_shipper.dashboard.EasyPostProvider")
+def test_advance_order_through_manual_flow(mock_provider_cls, data_dir, client):
     """POST /api/orders/{id}/advance walks through the manual fulfillment steps."""
+    mock_provider = MagicMock()
+    mock_provider.schedule_pickup.return_value = "EMC123456789"
+    mock_provider_cls.return_value = mock_provider
+
     oid = "22-22222-22222"
 
     # pending_confirmation → packed
@@ -223,18 +242,20 @@ def test_advance_order_through_manual_flow(data_dir, client):
     assert resp.status_code == 200
     assert resp.json()["status"] == "packed"
 
-    # packed → pickup_scheduled
+    # packed → pickup_scheduled (triggers real EasyPost pickup call)
     resp = client.post(f"/api/orders/{oid}/advance")
     assert resp.status_code == 200
     assert resp.json()["status"] == "pickup_scheduled"
+    mock_provider.schedule_pickup.assert_called_once()
+
+    # Verify tracking_detail has pickup info
+    state = json.loads((data_dir / "orders" / oid / "state.json").read_text())
+    assert state["status"] == "pickup_scheduled"
+    assert "EMC123456789" in state["tracking_detail"]
 
     # pickup_scheduled has no manual advance — tracking poll handles the rest
     resp = client.post(f"/api/orders/{oid}/advance")
     assert resp.status_code == 400
-
-    # Verify state.json was updated on disk
-    state = json.loads((data_dir / "orders" / oid / "state.json").read_text())
-    assert state["status"] == "pickup_scheduled"
 
 
 def test_advance_rejects_failed_orders(data_dir, client):
@@ -346,9 +367,80 @@ def test_check_tracking_updates_scheduled_to_in_transit(tmp_path):
     assert state["tracking_detail"] == "Accepted at USPS Origin Facility"
 
 
+@patch("ebay_shipper.dashboard.EasyPostProvider")
+def test_advance_to_scheduled_fails_on_pickup_error(mock_provider_cls, data_dir, client):
+    """Advance from packed fails if EasyPost pickup fails, state stays packed."""
+    mock_provider = MagicMock()
+    mock_provider.schedule_pickup.return_value = None  # pickup failed
+    mock_provider_cls.return_value = mock_provider
+
+    oid = "22-22222-22222"
+
+    # pending_confirmation → packed
+    client.post(f"/api/orders/{oid}/advance")
+
+    # packed → pickup_scheduled should fail
+    resp = client.post(f"/api/orders/{oid}/advance")
+    assert resp.status_code == 500
+
+    # State should still be packed
+    state = json.loads((data_dir / "orders" / oid / "state.json").read_text())
+    assert state["status"] == "packed"
+
+
+@patch("ebay_shipper.dashboard.EasyPostProvider")
+def test_advance_to_scheduled_no_shipment_id(mock_provider_cls, data_dir):
+    """Advance from packed fails if order has no shipment_id."""
+    from ebay_shipper.dashboard import create_app
+    # Create order with no shipment_id
+    orders_dir = data_dir / "orders"
+    order_dir = orders_dir / "88-88888-88888"
+    order_dir.mkdir(parents=True)
+    (order_dir / "state.json").write_text(json.dumps({
+        "order_id": "88-88888-88888",
+        "status": "packed",
+        "tracking_number": "9400111899223456789012",
+        "rate": "5.00",
+        "shipment_id": "",
+        "packing_list": str(order_dir / "packing_list.pdf"),
+        "label": str(order_dir / "label.png"),
+    }))
+
+    app = create_app(data_dir, TEST_CONFIG)
+    c = TestClient(app)
+
+    resp = c.post("/api/orders/88-88888-88888/advance")
+    assert resp.status_code == 400
+    mock_provider_cls.assert_not_called()
+
+
+def test_next_pickup_date_weekday():
+    """next_pickup_date returns tomorrow on a weekday."""
+    from datetime import datetime
+    from ebay_shipper.label_provider import next_pickup_date, PACIFIC
+
+    # Mock a Wednesday
+    with patch("ebay_shipper.label_provider.datetime") as mock_dt:
+        mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, tzinfo=PACIFIC)  # Wednesday
+        mock_dt.strptime = datetime.strptime
+        result = next_pickup_date()
+        assert result == "2026-03-05"  # Thursday
+
+
+def test_next_pickup_date_saturday():
+    """next_pickup_date skips Sunday when called on Saturday."""
+    from datetime import datetime
+    from ebay_shipper.label_provider import next_pickup_date, PACIFIC
+
+    with patch("ebay_shipper.label_provider.datetime") as mock_dt:
+        mock_dt.now.return_value = datetime(2026, 2, 28, 10, 0, tzinfo=PACIFIC)  # Saturday
+        mock_dt.strptime = datetime.strptime
+        result = next_pickup_date()
+        assert result == "2026-03-02"  # Monday
+
+
 def test_check_tracking_skips_non_porched(tmp_path):
     """check_tracking_updates skips orders not in porched/tracking state."""
-    from unittest.mock import MagicMock
     from ebay_shipper.main import check_tracking_updates
 
     orders_dir = tmp_path / "orders"

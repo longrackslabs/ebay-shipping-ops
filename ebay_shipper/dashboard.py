@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 
+from ebay_shipper.label_provider import EasyPostProvider, ShipFromAddress, next_pickup_date
 from ebay_shipper.printer import print_file
 
 logger = logging.getLogger(__name__)
@@ -218,6 +219,37 @@ def create_app(data_dir: Path, config: dict | None = None) -> FastAPI:
 
         current = state["status"]
         next_status = state_cfg["next"]
+
+        # When advancing to pickup_scheduled, actually schedule via EasyPost
+        if next_status == "pickup_scheduled":
+            api_key = _config.get("easypost_api_key", "")
+            if not api_key:
+                raise HTTPException(500, "No EASYPOST_API_KEY configured")
+
+            shipment_id = state.get("shipment_id", "")
+            if not shipment_id:
+                raise HTTPException(400, "Order has no shipment_id — cannot schedule pickup")
+
+            provider = EasyPostProvider(api_key)
+            ship_from = ShipFromAddress(
+                name=_config.get("from_name", ""),
+                street=_config.get("from_street", ""),
+                city=_config.get("from_city", ""),
+                state=_config.get("from_state", ""),
+                zip_code=_config.get("from_zip", ""),
+                phone=_config.get("from_phone", ""),
+                company=_config.get("from_company", ""),
+            )
+
+            confirmation = provider.schedule_pickup(
+                shipment_id, ship_from, data_dir,
+                instructions=_config.get("pickup_instructions", "Front porch"),
+            )
+            if not confirmation:
+                raise HTTPException(500, "Failed to schedule USPS pickup")
+
+            pickup_date = next_pickup_date()
+            state["tracking_detail"] = f"Pickup {pickup_date} ({confirmation})"
 
         state["status"] = next_status
         state_file.write_text(json.dumps(state, indent=2))

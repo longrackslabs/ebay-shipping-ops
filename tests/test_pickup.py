@@ -65,18 +65,16 @@ def test_schedule_pickup_creates_and_buys(mock_client_cls, tmp_path):
 
 @patch("ebay_shipper.label_provider.easypost.EasyPostClient")
 def test_schedule_pickup_skips_if_already_scheduled(mock_client_cls, tmp_path):
-    """Test that schedule_pickup skips if a pickup is already scheduled for tomorrow."""
-    from datetime import datetime, timedelta
-    from zoneinfo import ZoneInfo
+    """Test that schedule_pickup skips if a pickup is already scheduled for the next pickup date."""
+    from ebay_shipper.label_provider import next_pickup_date
 
     mock_client = MagicMock()
     mock_client_cls.return_value = mock_client
 
-    # Pre-save a pickup state for tomorrow (Pacific time, matching the code)
-    pacific = ZoneInfo("America/Los_Angeles")
-    tomorrow = (datetime.now(pacific) + timedelta(days=1)).strftime("%Y-%m-%d")
+    # Pre-save a pickup state for the next valid pickup date
+    pickup_date = next_pickup_date()
     _save_pickup_state(tmp_path, {
-        "pickup_date": tomorrow,
+        "pickup_date": pickup_date,
         "pickup_id": "pickup_existing",
         "confirmation": "WTC_EXISTING",
         "status": "scheduled",
