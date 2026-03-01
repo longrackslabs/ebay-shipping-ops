@@ -248,10 +248,10 @@ def test_advance_order_through_manual_flow(mock_provider_cls, data_dir, client):
     assert resp.json()["status"] == "pickup_scheduled"
     mock_provider.schedule_pickup.assert_called_once()
 
-    # Verify tracking_detail has pickup info
+    # Verify pickup_confirmation has pickup info (separate from tracking_detail)
     state = json.loads((data_dir / "orders" / oid / "state.json").read_text())
     assert state["status"] == "pickup_scheduled"
-    assert "EMC123456789" in state["tracking_detail"]
+    assert "EMC123456789" in state["pickup_confirmation"]
 
     # pickup_scheduled has no manual advance — tracking poll handles the rest
     resp = client.post(f"/api/orders/{oid}/advance")

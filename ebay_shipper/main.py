@@ -328,9 +328,9 @@ def schedule_pickup_command(order_id: str | None, config: dict) -> bool:
     )
 
     if confirmation:
-        # Save pickup info to order's tracking_detail
+        # Save pickup info separately so tracking poll doesn't overwrite it
         pickup_date = next_pickup_date()
-        state["tracking_detail"] = f"Pickup {pickup_date} ({confirmation})"
+        state["pickup_confirmation"] = f"Pickup {pickup_date} ({confirmation})"
         state_file.write_text(json.dumps(state, indent=2))
         logger.info("Pickup scheduled for order %s (confirmation: %s)", order_dir.name, confirmation)
         return True

@@ -109,6 +109,7 @@ def _read_orders(data_dir: Path) -> list[dict]:
             "rate": state.get("rate", ""),
             "shipment_id": state.get("shipment_id", ""),
             "tracking_detail": state.get("tracking_detail", ""),
+            "pickup_confirmation": state.get("pickup_confirmation", ""),
             "buyer": order_data.get("buyer", {}).get("username", ""),
             "items": items,
             "total": order_data.get("pricingSummary", {}).get("total", {}).get("value", ""),
@@ -249,7 +250,7 @@ def create_app(data_dir: Path, config: dict | None = None) -> FastAPI:
                 raise HTTPException(500, "Failed to schedule USPS pickup")
 
             pickup_date = next_pickup_date()
-            state["tracking_detail"] = f"Pickup {pickup_date} ({confirmation})"
+            state["pickup_confirmation"] = f"Pickup {pickup_date} ({confirmation})"
 
         state["status"] = next_status
         state_file.write_text(json.dumps(state, indent=2))
