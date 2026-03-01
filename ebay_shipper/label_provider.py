@@ -321,10 +321,12 @@ class EasyPostProvider:
             )
             logger.debug("Tracking %s: %s", tracking_number, tracker.status)
             detail = None
+            event_time = None
             if tracker.tracking_details:
                 latest = tracker.tracking_details[-1]
                 detail = latest.message
-            return {"status": tracker.status, "detail": detail}
+                event_time = getattr(latest, "datetime", None)
+            return {"status": tracker.status, "detail": detail, "event_time": event_time}
         except Exception:
             logger.exception("Failed to check tracking for %s", tracking_number)
             return None

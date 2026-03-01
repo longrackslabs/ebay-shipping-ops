@@ -198,6 +198,13 @@ function formatDate(iso) {
   return `${mo} ${day} ${h12}:${m}${ampm}`;
 }
 
+function uspsDetail(o) {
+  if (o.pickup_confirmation) return o.pickup_confirmation;
+  if (!o.tracking_detail) return '—';
+  const ts = o.tracking_timestamp ? ` · ${formatDate(o.tracking_timestamp)}` : '';
+  return o.tracking_detail + ts;
+}
+
 function statusBadge(status) {
   const cfg = STATES[status] || {};
   const label = cfg.label || status;
@@ -282,7 +289,7 @@ function renderOrders(orders) {
       <td>${statusBadge(o.status)}</td>
       <td class="text-right font-mono text-zinc-400">${o.rate ? '$' + o.rate : '—'}</td>
       <td>${trackingLink(o.tracking_number)}</td>
-      <td class="text-xs text-zinc-400">${o.pickup_confirmation || o.tracking_detail || '—'}</td>
+      <td class="text-xs text-zinc-400">${uspsDetail(o)}</td>
       <td class="text-right">${actionBtn(o)}</td>
     </tr>
   `).join('');
@@ -302,7 +309,7 @@ function renderOrders(orders) {
         <span class="font-mono">${o.total ? '$' + o.total : ''}</span>
       </div>
       <div class="mt-1"><a href="https://www.ebay.com/mesh/ord/details?orderid=${o.order_id}" target="_blank" rel="noopener" class="font-mono text-xs text-zinc-500 hover:text-amber-400 transition-colors">${o.order_id}</a></div>
-      ${o.tracking_number ? `<div class="mt-2 flex items-center gap-2">${trackingLink(o.tracking_number)}${(o.pickup_confirmation || o.tracking_detail) ? `<span class="text-xs text-zinc-500">· ${o.pickup_confirmation || o.tracking_detail}</span>` : ''}</div>` : ''}
+      ${o.tracking_number ? `<div class="mt-2 flex items-center gap-2">${trackingLink(o.tracking_number)}${uspsDetail(o) !== '—' ? `<span class="text-xs text-zinc-500">· ${uspsDetail(o)}</span>` : ''}</div>` : ''}
       ${actions ? `<div class="mt-3 flex gap-2">${actions}</div>` : ''}
     </div>`;
   }).join('');

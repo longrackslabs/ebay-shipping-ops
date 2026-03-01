@@ -380,6 +380,7 @@ def check_tracking_updates(orders_dir: Path, label_provider):
             continue
         easypost_status = result["status"]
         detail = result.get("detail")
+        event_time = result.get("event_time")
         mapped = TRACKING_STATUS_MAP.get(easypost_status)
         changed = mapped and mapped != current
         detail_changed = detail and detail != state.get("tracking_detail")
@@ -388,6 +389,8 @@ def check_tracking_updates(orders_dir: Path, label_provider):
                 state["status"] = mapped
             if detail:
                 state["tracking_detail"] = detail
+            if event_time:
+                state["tracking_timestamp"] = event_time
             state_file.write_text(json.dumps(state, indent=2))
             logger.info("Order %s: %s → %s (%s)",
                         state.get("order_id", order_dir.name), current,

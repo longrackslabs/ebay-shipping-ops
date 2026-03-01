@@ -109,6 +109,7 @@ def _read_orders(data_dir: Path) -> list[dict]:
             "rate": state.get("rate", ""),
             "shipment_id": state.get("shipment_id", ""),
             "tracking_detail": state.get("tracking_detail", ""),
+            "tracking_timestamp": state.get("tracking_timestamp", ""),
             "pickup_confirmation": state.get("pickup_confirmation", ""),
             "buyer": order_data.get("buyer", {}).get("username", ""),
             "items": items,
