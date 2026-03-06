@@ -28,7 +28,7 @@ STATES = {
     "packed": {
         "label": "Packed", "badge": "pending",
         "next": "pickup_scheduled", "advance_label": "Schedule",
-        "actions": ["reprint", "advance", "cancel"],
+        "actions": ["reprint", "advance", "skip_pickup", "cancel"],
         "needs_attention": True, "attention_label": "to schedule",
     },
     "pickup_scheduled": {
@@ -258,6 +258,22 @@ def create_app(data_dir: Path, config: dict | None = None) -> FastAPI:
         logger.info("Order %s: %s → %s", order_id, current, next_status)
 
         return {"success": True, "previous": current, "status": next_status}
+
+    @app.post("/api/orders/{order_id}/skip_pickup")
+    def skip_pickup(order_id: str):
+        """Advance packed → pickup_scheduled without calling EasyPost.
+
+        Use when a pickup is already scheduled and the package just needs
+        to go on the porch with the others.
+        """
+        _, state_file, state, _ = _validate_action(order_id, "skip_pickup")
+
+        current = state["status"]
+        state["status"] = "pickup_scheduled"
+        state_file.write_text(json.dumps(state, indent=2))
+        logger.info("Order %s: %s → pickup_scheduled (skip)", order_id, current)
+
+        return {"success": True, "previous": current, "status": "pickup_scheduled"}
 
     @app.get("/", response_class=HTMLResponse)
     def index():

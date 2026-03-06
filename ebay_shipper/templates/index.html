@@ -229,6 +229,9 @@ function actionBtn(order) {
   if (actions.includes('advance') && cfg.advance_label) {
     btns.push(`<button class="btn btn-amber" onclick="doAction('${order.order_id}','advance')">${cfg.advance_label}</button>`);
   }
+  if (actions.includes('skip_pickup')) {
+    btns.push(`<button class="btn btn-muted" onclick="doAction('${order.order_id}','skip_pickup')">Porched</button>`);
+  }
   if (actions.includes('retry')) {
     btns.push(`<button class="btn btn-rose" onclick="doAction('${order.order_id}','retry')">Retry</button>`);
   }
