@@ -270,6 +270,8 @@ def create_app(data_dir: Path, config: dict | None = None) -> FastAPI:
 
         current = state["status"]
         state["status"] = "pickup_scheduled"
+        now = datetime.now(timezone.utc).astimezone()
+        state["pickup_confirmation"] = f"Porched {now.strftime('%b %d %-I:%M %p')}"
         state_file.write_text(json.dumps(state, indent=2))
         logger.info("Order %s: %s → pickup_scheduled (skip)", order_id, current)
 
