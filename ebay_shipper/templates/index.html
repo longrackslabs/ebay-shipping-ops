@@ -199,10 +199,12 @@ function formatDate(iso) {
 }
 
 function uspsDetail(o) {
+  if (o.tracking_detail) {
+    const ts = o.tracking_timestamp ? ` · ${formatDate(o.tracking_timestamp)}` : '';
+    return o.tracking_detail + ts;
+  }
   if (o.pickup_confirmation) return o.pickup_confirmation;
-  if (!o.tracking_detail) return '—';
-  const ts = o.tracking_timestamp ? ` · ${formatDate(o.tracking_timestamp)}` : '';
-  return o.tracking_detail + ts;
+  return '—';
 }
 
 function statusBadge(status) {
