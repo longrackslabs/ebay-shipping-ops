@@ -209,11 +209,26 @@ def create_app(data_dir: Path, config: dict | None = None) -> FastAPI:
         _, state_file, state, _ = _validate_action(order_id, "cancel")
 
         previous = state["status"]
+
+        # Refund the EasyPost label if we have a shipment_id
+        refund_status = None
+        shipment_id = state.get("shipment_id", "")
+        api_key = _config.get("easypost_api_key", "")
+        if shipment_id and api_key:
+            provider = EasyPostProvider(api_key)
+            refund_status = provider.refund_shipment(shipment_id)
+            if refund_status:
+                state["refund_status"] = refund_status
+                logger.info("Order %s: label refund %s", order_id, refund_status)
+            else:
+                logger.warning("Order %s: label refund failed — cancelling anyway", order_id)
+
         state["status"] = "cancelled"
         state_file.write_text(json.dumps(state, indent=2))
         logger.info("Order %s: %s → cancelled", order_id, previous)
 
-        return {"success": True, "previous": previous, "status": "cancelled"}
+        return {"success": True, "previous": previous, "status": "cancelled",
+                "refund_status": refund_status}
 
     @app.post("/api/orders/{order_id}/advance")
     def advance_order(order_id: str):

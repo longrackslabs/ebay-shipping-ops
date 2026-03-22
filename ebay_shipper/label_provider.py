@@ -305,6 +305,21 @@ class EasyPostProvider:
             logger.exception("Failed to schedule USPS pickup")
             return None
 
+    def refund_shipment(self, shipment_id: str) -> str | None:
+        """Request a refund for an unused USPS label.
+
+        Returns the refund status ('submitted', 'refunded', etc.) or None on error.
+        USPS labels must be unscanned and within 30 days of creation.
+        """
+        try:
+            result = self.client.shipment.refund(shipment_id)
+            status = getattr(result, "refund_status", "submitted")
+            logger.info("Refund requested for shipment %s: %s", shipment_id, status)
+            return status
+        except Exception:
+            logger.exception("Failed to refund shipment %s", shipment_id)
+            return None
+
     def check_tracking(self, tracking_number: str) -> dict | None:
         """Check tracking status via EasyPost.
 
