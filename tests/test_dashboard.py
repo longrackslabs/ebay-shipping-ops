@@ -264,14 +264,36 @@ def test_advance_rejects_failed_orders(data_dir, client):
     assert resp.status_code == 400
 
 
-def test_cancel_order(data_dir, client):
-    """POST /api/orders/{id}/cancel sets status to cancelled."""
-    resp = client.post("/api/orders/22-22222-22222/cancel")
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "cancelled"
+def test_cancel_order_refunds_label(data_dir, client):
+    """POST /api/orders/{id}/cancel refunds the EasyPost label and sets status to cancelled."""
+    with patch("ebay_shipper.dashboard.EasyPostProvider") as MockProvider:
+        mock_provider = MockProvider.return_value
+        mock_provider.refund_shipment.return_value = "submitted"
+
+        resp = client.post("/api/orders/22-22222-22222/cancel")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "cancelled"
+        assert resp.json()["refund_status"] == "submitted"
+
+        mock_provider.refund_shipment.assert_called_once_with("shp_def")
 
     state = json.loads((data_dir / "orders" / "22-22222-22222" / "state.json").read_text())
     assert state["status"] == "cancelled"
+    assert state["refund_status"] == "submitted"
+
+
+def test_cancel_order_without_shipment_id(data_dir, client):
+    """POST /api/orders/{id}/cancel works even without shipment_id (no refund attempted)."""
+    # Remove shipment_id from the order state
+    state_file = data_dir / "orders" / "22-22222-22222" / "state.json"
+    state = json.loads(state_file.read_text())
+    state.pop("shipment_id", None)
+    state_file.write_text(json.dumps(state, indent=2))
+
+    resp = client.post("/api/orders/22-22222-22222/cancel")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+    assert resp.json()["refund_status"] is None
 
 
 def test_get_states(client):
