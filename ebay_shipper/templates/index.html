@@ -237,6 +237,9 @@ function actionBtn(order) {
   if (actions.includes('retry')) {
     btns.push(`<button class="btn btn-rose" onclick="doAction('${order.order_id}','retry')">Retry</button>`);
   }
+  if (actions.includes('cancel')) {
+    btns.push(`<button class="btn btn-rose" onclick="if(confirm('Cancel order and void label?'))doAction('${order.order_id}','cancel')">Cancel</button>`);
+  }
   return btns.join(' ');
 }
 
