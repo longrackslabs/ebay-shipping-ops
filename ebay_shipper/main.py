@@ -15,11 +15,11 @@ from dotenv import load_dotenv
 
 from ebay_shipper.ebay_auth import EbayAuth
 from ebay_shipper.label_provider import (
-    STANDARD_PARCEL,
     EasyPostProvider,
     ShipFromAddress,
     StubLabelProvider,
-    calculate_weight,
+    calculate_parcel,
+    load_sku_config,
     next_pickup_date,
 )
 from ebay_shipper.order_poller import OrderPoller, create_shipping_fulfillment
@@ -88,6 +88,7 @@ def load_config() -> dict:
         "from_phone": os.getenv("FROM_PHONE", ""),
         "from_company": os.getenv("FROM_COMPANY", ""),
         "pickup_enabled": os.getenv("PICKUP_ENABLED", "false").lower() == "true",
+        "sku_config": load_sku_config(DATA_DIR / "sku_config.json"),
     }
 
 
@@ -127,15 +128,9 @@ def process_order(order: dict, config: dict, label_provider, output_dir: Path, a
         return False
     ship_to = fulfillment[0].get("shippingStep", {}).get("shipTo", {})
 
-    # Calculate weight from line items
-    weight = calculate_weight(order.get("lineItems", []))
-    parcel = STANDARD_PARCEL
-    parcel = type(parcel)(
-        length=parcel.length,
-        width=parcel.width,
-        height=parcel.height,
-        weight=weight,
-    )
+    # Calculate parcel dimensions and weight from line items
+    sku_config = config.get("sku_config")
+    parcel = calculate_parcel(order.get("lineItems", []), sku_config)
 
     ship_from = ShipFromAddress(
         name=config["from_name"],

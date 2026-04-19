@@ -61,29 +61,74 @@ class ShippingLabel:
     shipment_id: str = ""  # EasyPost shipment ID, needed for pickup scheduling
 
 
-# Standard parcel for all nozzle shipments
-STANDARD_PARCEL = Parcel(length=9, width=6, height=1, weight=0)  # weight set per order
+# Default parcel dimensions (inches) — override via ~/.ebay-shipper/sku_config.json
+STANDARD_PARCEL = Parcel(length=9, width=6, height=1, weight=0)
 
-# Weight per SKU pattern (ounces)
-SKU_WEIGHTS = {
-    "NZ-BNDL": 9,  # bundle
-    "NZ-": 3,       # single nozzle (fallback)
+# Default SKU config — override via ~/.ebay-shipper/sku_config.json
+# Each entry maps a SKU prefix to weight (oz) and optional parcel dimensions.
+# Longer prefixes match first. Unmatched SKUs get 3oz and the default parcel.
+DEFAULT_SKU_CONFIG = {
+    "NZ-BNDL": {"weight_oz": 9},
+    "NZ-":     {"weight_oz": 3},
 }
 
 
-def calculate_weight(line_items: list[dict]) -> float:
+def load_sku_config(config_path: Path) -> dict:
+    """Load SKU config from JSON file, falling back to defaults."""
+    if config_path.exists():
+        return json.loads(config_path.read_text())
+    return DEFAULT_SKU_CONFIG
+
+
+def _match_sku(sku: str, sku_config: dict) -> dict:
+    """Find the best (longest prefix) match for a SKU."""
+    best = {}
+    best_len = 0
+    for prefix, cfg in sku_config.items():
+        if sku.startswith(prefix) and len(prefix) > best_len:
+            best = cfg
+            best_len = len(prefix)
+    return best
+
+
+def calculate_weight(line_items: list[dict], sku_config: dict | None = None) -> float:
     """Calculate total package weight from order line items."""
+    config = sku_config or DEFAULT_SKU_CONFIG
     total_oz = 0
     for item in line_items:
         sku = item.get("sku", "")
         qty = item.get("quantity", 1)
-        weight = 3  # default
-        for prefix, oz in SKU_WEIGHTS.items():
-            if sku.startswith(prefix):
-                weight = oz
-                break
+        match = _match_sku(sku, config)
+        weight = match.get("weight_oz", 3)
         total_oz += weight * qty
     return total_oz
+
+
+def calculate_parcel(line_items: list[dict], sku_config: dict | None = None) -> Parcel:
+    """Determine parcel dimensions and weight for an order.
+
+    Uses the largest parcel dimensions from any matched SKU in the order.
+    Weight is summed across all items.
+    """
+    config = sku_config or DEFAULT_SKU_CONFIG
+    weight = calculate_weight(line_items, config)
+    parcel = STANDARD_PARCEL
+
+    # Find the largest parcel needed by any item in the order
+    for item in line_items:
+        sku = item.get("sku", "")
+        match = _match_sku(sku, config)
+        if "parcel" in match:
+            p = match["parcel"]
+            if (p.get("length", 0) * p.get("width", 0) * p.get("height", 0) >
+                    parcel.length * parcel.width * parcel.height):
+                parcel = Parcel(
+                    length=p["length"], width=p["width"],
+                    height=p["height"], weight=0,
+                )
+
+    return Parcel(length=parcel.length, width=parcel.width,
+                  height=parcel.height, weight=weight)
 
 
 class StubLabelProvider:

@@ -8,6 +8,7 @@ from ebay_shipper.label_provider import (
     Parcel,
     ShipFromAddress,
     StubLabelProvider,
+    calculate_parcel,
     calculate_weight,
 )
 
@@ -41,6 +42,68 @@ def test_calculate_weight_mixed():
 def test_calculate_weight_unknown_sku():
     items = [{"sku": "UNKNOWN", "quantity": 1}]
     assert calculate_weight(items) == 3  # default weight
+
+
+def test_calculate_weight_custom_config():
+    """Custom SKU config overrides defaults."""
+    config = {"SPOOL-": {"weight_oz": 48}, "NZ-": {"weight_oz": 3}}
+    items = [{"sku": "SPOOL-PLA-BLK", "quantity": 1}]
+    assert calculate_weight(items, config) == 48
+
+
+def test_calculate_parcel_default():
+    """Default parcel is 9x6x1 for nozzles."""
+    items = [{"sku": "NZ-4MM", "quantity": 2}]
+    parcel = calculate_parcel(items)
+    assert parcel.length == 9
+    assert parcel.width == 6
+    assert parcel.height == 1
+    assert parcel.weight == 6  # 3oz * 2
+
+
+def test_calculate_parcel_custom_dimensions():
+    """SKU with custom parcel dimensions uses those dimensions."""
+    config = {
+        "SPOOL-": {"weight_oz": 48, "parcel": {"length": 14, "width": 14, "height": 14}},
+        "NZ-": {"weight_oz": 3},
+    }
+    items = [{"sku": "SPOOL-PLA-BLK", "quantity": 1}]
+    parcel = calculate_parcel(items, config)
+    assert parcel.length == 14
+    assert parcel.width == 14
+    assert parcel.height == 14
+    assert parcel.weight == 48
+
+
+def test_calculate_parcel_mixed_uses_largest():
+    """Mixed order uses largest parcel from any item."""
+    config = {
+        "SPOOL-": {"weight_oz": 48, "parcel": {"length": 14, "width": 14, "height": 14}},
+        "NZ-": {"weight_oz": 3},
+    }
+    items = [
+        {"sku": "SPOOL-PLA-BLK", "quantity": 1},
+        {"sku": "NZ-4MM", "quantity": 1},
+    ]
+    parcel = calculate_parcel(items, config)
+    assert parcel.length == 14  # spool box
+    assert parcel.weight == 51  # 48 + 3
+
+
+def test_load_sku_config_file(tmp_path):
+    """Loads SKU config from JSON file."""
+    from ebay_shipper.label_provider import load_sku_config
+    config_file = tmp_path / "sku_config.json"
+    config_file.write_text('{"SPOOL-": {"weight_oz": 48}}')
+    config = load_sku_config(config_file)
+    assert config["SPOOL-"]["weight_oz"] == 48
+
+
+def test_load_sku_config_missing_file(tmp_path):
+    """Falls back to defaults when config file doesn't exist."""
+    from ebay_shipper.label_provider import DEFAULT_SKU_CONFIG, load_sku_config
+    config = load_sku_config(tmp_path / "nope.json")
+    assert config == DEFAULT_SKU_CONFIG
 
 
 def test_stub_label_provider(tmp_path):
