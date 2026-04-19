@@ -63,6 +63,25 @@ These are not suggestions. These are facts learned by wasting labels.
 - eBay date filter format: no microseconds, Z suffix (`2026-02-19T00:00:00Z`)
 - OAuth token acquired via `get_token.py` (authorization code flow) — NOT the eBay portal "User Tokens" page, those don't work with refresh flow
 
+## SKU Config
+
+SKU weights and parcel dimensions are configured in `~/.ebay-shipper/sku_config.json`. If the file doesn't exist, hardcoded defaults are used (nozzles only).
+
+```json
+{
+    "NZ-BNDL": {"weight_oz": 9},
+    "NZ-":     {"weight_oz": 3},
+    "SPOOL-":  {"weight_oz": 48, "parcel": {"length": 14, "width": 14, "height": 14}}
+}
+```
+
+- Keys are SKU prefixes — longest matching prefix wins
+- `weight_oz`: item weight in ounces (required)
+- `parcel`: optional box dimensions in inches (`length`, `width`, `height`). If omitted, uses default 9x6x1 envelope.
+- Mixed orders use the largest parcel from any item; weights are summed
+- Unrecognized SKUs default to 3oz and the standard 9x6x1 envelope
+- To add a new product: add its SKU prefix to this file on the Linux box. No code changes needed.
+
 ## Test Data
 
 Use real values in test fixtures, not placeholder garbage:
