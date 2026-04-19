@@ -66,6 +66,25 @@ ebay-shipper pickup [order_id]
 ebay-shipper dashboard
 ```
 
+## SKU Config
+
+Product weights and parcel dimensions are configured in `~/.ebay-shipper/sku_config.json`. Without this file, defaults are used (nozzles: 3oz in 9x6x1 envelope, bundles: 9oz).
+
+```json
+{
+    "NZ-BNDL": {"weight_oz": 9},
+    "NZ-":     {"weight_oz": 3},
+    "SPOOL-":  {"weight_oz": 48, "parcel": {"length": 14, "width": 14, "height": 14}}
+}
+```
+
+- Keys are SKU prefixes (longest match wins)
+- `weight_oz` — item weight in ounces
+- `parcel` — optional box dimensions in inches. Omit to use the default 9x6x1 envelope.
+- Mixed orders use the largest parcel; weights are summed
+
+To add a new product, add its SKU prefix to this file. No code changes needed.
+
 ## Tests
 
 ```bash
