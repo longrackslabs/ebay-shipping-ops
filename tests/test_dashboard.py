@@ -212,6 +212,14 @@ def test_reprint_not_found(client):
     assert resp.status_code == 404
 
 
+def test_rejects_malformed_order_id(client):
+    """POST endpoints reject order IDs that don't match eBay numeric format."""
+    resp = client.post("/api/orders/abc-def-ghi/reprint")
+    assert resp.status_code == 400
+    resp = client.post("/api/orders/; rm -rf/cancel")
+    assert resp.status_code == 400
+
+
 @patch("ebay_shipper.dashboard.print_file")
 def test_retry_order(mock_print, data_dir, client):
     """POST /api/orders/{id}/retry accepts failed orders."""

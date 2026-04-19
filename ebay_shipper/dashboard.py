@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -173,6 +174,8 @@ def create_app(data_dir: Path, config: dict | None = None) -> FastAPI:
 
     def _validate_action(order_id: str, action: str):
         """Load order state and validate that the action is allowed."""
+        if not re.match(r"^\d+-\d+-\d+$", order_id):
+            raise HTTPException(400, "Invalid order ID format")
         order_dir = data_dir / "orders" / order_id
         state_file = order_dir / "state.json"
         if not state_file.exists():
