@@ -1,5 +1,5 @@
 {
     "NZ-BNDL": {"weight_oz": 4},
-    "NZ-":     {"weight_oz": 1.6},
+    "NZ-":     {"weight_oz": 2},
     "SPOOL-":  {"weight_oz": 48, "parcel": {"length": 14, "width": 14, "height": 14}}
 }
