@@ -234,6 +234,9 @@ function actionBtn(order) {
   if (actions.includes('skip_pickup')) {
     btns.push(`<button class="btn btn-muted" onclick="doAction('${order.order_id}','skip_pickup')">Porched</button>`);
   }
+  if (actions.includes('mailed')) {
+    btns.push(`<button class="btn btn-muted" onclick="doAction('${order.order_id}','mailed')">Mailed</button>`);
+  }
   if (actions.includes('retry')) {
     btns.push(`<button class="btn btn-rose" onclick="doAction('${order.order_id}','retry')">Retry</button>`);
   }

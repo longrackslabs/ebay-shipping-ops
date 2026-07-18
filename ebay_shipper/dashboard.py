@@ -29,7 +29,7 @@ STATES = {
     "packed": {
         "label": "Packed", "badge": "pending",
         "next": "pickup_scheduled", "advance_label": "Schedule",
-        "actions": ["reprint", "advance", "skip_pickup", "cancel"],
+        "actions": ["reprint", "advance", "skip_pickup", "mailed", "cancel"],
         "needs_attention": True, "attention_label": "to schedule",
     },
     "pickup_scheduled": {
@@ -292,6 +292,24 @@ def create_app(data_dir: Path, config: dict | None = None) -> FastAPI:
         state["pickup_confirmation"] = f"Porched {now.strftime('%b %d %-I:%M %p')}"
         state_file.write_text(json.dumps(state, indent=2))
         logger.info("Order %s: %s → pickup_scheduled (skip)", order_id, current)
+
+        return {"success": True, "previous": current, "status": "pickup_scheduled"}
+
+    @app.post("/api/orders/{order_id}/mailed")
+    def mailed(order_id: str):
+        """Advance packed → pickup_scheduled without calling EasyPost.
+
+        Use when the package was hand-carried to the post office or a
+        mailbox instead of waiting for a scheduled USPS pickup.
+        """
+        _, state_file, state, _ = _validate_action(order_id, "mailed")
+
+        current = state["status"]
+        state["status"] = "pickup_scheduled"
+        now = datetime.now(timezone.utc).astimezone()
+        state["pickup_confirmation"] = f"Mailed {now.strftime('%b %d %-I:%M %p')}"
+        state_file.write_text(json.dumps(state, indent=2))
+        logger.info("Order %s: %s → pickup_scheduled (mailed)", order_id, current)
 
         return {"success": True, "previous": current, "status": "pickup_scheduled"}
 

@@ -266,6 +266,24 @@ def test_advance_order_through_manual_flow(mock_provider_cls, data_dir, client):
     assert resp.status_code == 400
 
 
+def test_mailed_skips_easypost(data_dir, client):
+    """POST /api/orders/{id}/mailed advances packed → pickup_scheduled without EasyPost."""
+    oid = "22-22222-22222"
+
+    # pending_confirmation → packed
+    resp = client.post(f"/api/orders/{oid}/advance")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "packed"
+
+    resp = client.post(f"/api/orders/{oid}/mailed")
+    assert resp.status_code == 200
+    assert resp.json() == {"success": True, "previous": "packed", "status": "pickup_scheduled"}
+
+    state = json.loads((data_dir / "orders" / oid / "state.json").read_text())
+    assert state["status"] == "pickup_scheduled"
+    assert state["pickup_confirmation"].startswith("Mailed ")
+
+
 def test_advance_rejects_failed_orders(data_dir, client):
     """POST /api/orders/{id}/advance rejects label_failed orders (use retry instead)."""
     resp = client.post("/api/orders/33-33333-33333/advance")
