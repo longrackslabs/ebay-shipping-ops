@@ -207,10 +207,14 @@ function uspsDetail(o) {
   return '—';
 }
 
-function statusBadge(status) {
+function statusBadge(status, pickupConfirmation) {
   const cfg = STATES[status] || {};
-  const label = cfg.label || status;
+  let label = cfg.label || status;
   const badge = cfg.badge || '';
+  if (status === 'pickup_scheduled' && pickupConfirmation) {
+    if (pickupConfirmation.startsWith('Porched')) label = 'Porched';
+    else if (pickupConfirmation.startsWith('Mailed')) label = 'Mailed';
+  }
   return `<span class="badge badge-${badge}">${label}</span>`;
 }
 
@@ -297,7 +301,7 @@ function renderOrders(orders) {
       <td>${o.buyer || '—'}</td>
       <td class="text-zinc-400">${o.items || '—'}</td>
       <td class="text-right font-mono">${o.total ? '$' + o.total : '—'}</td>
-      <td>${statusBadge(o.status)}</td>
+      <td>${statusBadge(o.status, o.pickup_confirmation)}</td>
       <td class="text-right font-mono text-zinc-400">${o.rate ? '$' + o.rate : '—'}</td>
       <td>${trackingLink(o.tracking_number)}</td>
       <td class="text-xs text-zinc-400">${uspsDetail(o)}</td>
@@ -311,7 +315,7 @@ function renderOrders(orders) {
     return `
     <div class="section-border p-4">
       <div class="flex items-center justify-between mb-2">
-        ${statusBadge(o.status)}
+        ${statusBadge(o.status, o.pickup_confirmation)}
         <span class="text-xs text-zinc-500">${formatDate(o.processed_at)}</span>
       </div>
       <div class="text-sm text-zinc-200 mb-1">${o.items || '—'}</div>
