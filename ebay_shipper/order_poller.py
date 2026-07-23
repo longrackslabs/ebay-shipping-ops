@@ -148,6 +148,16 @@ class OrderPoller:
             if order_id in self._processed_order_ids:
                 continue
 
+            fulfillment_status = order.get("orderFulfillmentStatus")
+            if fulfillment_status not in (None, "NOT_STARTED"):
+                logger.info(
+                    "Skipping order %s — already fulfilled outside this service (status: %s)",
+                    order_id, fulfillment_status,
+                )
+                self._log_order(order, "skipped_already_fulfilled")
+                self._processed_order_ids.add(order_id)
+                continue
+
             logger.info(
                 "New order: %s — %s item(s), total $%s",
                 order_id,

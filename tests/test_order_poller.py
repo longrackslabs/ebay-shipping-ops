@@ -93,6 +93,33 @@ def test_poll_empty_response(mock_get, tmp_path):
 
 
 @patch("ebay_shipper.order_poller.requests.get")
+def test_poll_skips_already_fulfilled_order(mock_get, tmp_path):
+    """Orders eBay already shows as fulfilled (e.g. shipped manually) aren't reprocessed."""
+    response = json.loads(json.dumps(SAMPLE_ORDER_RESPONSE))
+    response["orders"][0]["orderFulfillmentStatus"] = "FULFILLED"
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = response
+    mock_response.raise_for_status = MagicMock()
+    mock_get.return_value = mock_response
+
+    poller = OrderPoller(make_mock_auth(), tmp_path)
+    orders = poller.poll()
+
+    assert len(orders) == 0
+
+    log_file = tmp_path / "orders.jsonl"
+    entries = [json.loads(line) for line in log_file.read_text().strip().splitlines()]
+    assert len(entries) == 1
+    assert entries[0]["status"] == "skipped_already_fulfilled"
+
+    # Confirmed processed — a later poll covering the same order won't re-surface it either
+    poller2 = OrderPoller(make_mock_auth(), tmp_path)
+    orders2 = poller2.poll()
+    assert len(orders2) == 0
+
+
+@patch("ebay_shipper.order_poller.requests.get")
 def test_poll_persists_processed_orders_across_instances(mock_get, tmp_path):
     mock_response = MagicMock()
     mock_response.json.return_value = SAMPLE_ORDER_RESPONSE
