@@ -158,6 +158,16 @@ class OrderPoller:
                 self._processed_order_ids.add(order_id)
                 continue
 
+            cancel_state = order.get("cancelStatus", {}).get("cancelState")
+            if cancel_state not in (None, "NONE_REQUESTED"):
+                logger.info(
+                    "Skipping order %s — cancellation in progress or completed (cancelState: %s)",
+                    order_id, cancel_state,
+                )
+                self._log_order(order, "skipped_cancelled")
+                self._processed_order_ids.add(order_id)
+                continue
+
             logger.info(
                 "New order: %s — %s item(s), total $%s",
                 order_id,
