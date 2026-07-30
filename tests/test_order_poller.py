@@ -120,6 +120,32 @@ def test_poll_skips_already_fulfilled_order(mock_get, tmp_path):
 
 
 @patch("ebay_shipper.order_poller.requests.get")
+def test_poll_skips_cancelled_order(mock_get, tmp_path):
+    """Orders the buyer cancelled must not get a label, even though orderFulfillmentStatus
+    stays NOT_STARTED (it was never shipped) — cancellation lives in a separate field."""
+    response = json.loads(json.dumps(SAMPLE_ORDER_RESPONSE))
+    response["orders"][0]["cancelStatus"] = {
+        "cancelState": "CANCELED",
+        "cancelledDate": "2026-07-26T00:26:01.000Z",
+    }
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = response
+    mock_response.raise_for_status = MagicMock()
+    mock_get.return_value = mock_response
+
+    poller = OrderPoller(make_mock_auth(), tmp_path)
+    orders = poller.poll()
+
+    assert len(orders) == 0
+
+    log_file = tmp_path / "orders.jsonl"
+    entries = [json.loads(line) for line in log_file.read_text().strip().splitlines()]
+    assert len(entries) == 1
+    assert entries[0]["status"] == "skipped_cancelled"
+
+
+@patch("ebay_shipper.order_poller.requests.get")
 def test_poll_persists_processed_orders_across_instances(mock_get, tmp_path):
     mock_response = MagicMock()
     mock_response.json.return_value = SAMPLE_ORDER_RESPONSE
