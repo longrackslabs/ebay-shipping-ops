@@ -19,6 +19,7 @@ from ebay_shipper.label_provider import (
     ShipFromAddress,
     StubLabelProvider,
     calculate_parcel,
+    is_known_sku,
     load_sku_config,
     next_pickup_date,
 )
@@ -116,6 +117,34 @@ def process_order(order: dict, config: dict, label_provider, output_dir: Path, a
 
     # Save full order JSON for retry
     (order_dir / "order.json").write_text(json.dumps(order, indent=2))
+
+    # Hold orders with any SKU we don't recognize — one-offs and odd sizes
+    # need a human to pick the right box/postage, not a guessed default.
+    sku_config = config.get("sku_config")
+    unknown_skus = sorted({
+        item.get("sku", "") or "(no SKU)"
+        for item in order.get("lineItems", [])
+        if not is_known_sku(item.get("sku", ""), sku_config)
+    })
+    if unknown_skus:
+        state = {
+            "order_id": order_id,
+            "status": "unrecognized_sku",
+            "unknown_skus": unknown_skus,
+            "tracking_number": "",
+            "rate": "",
+            "shipment_id": "",
+            "packing_list": "",
+            "label": "",
+        }
+        (order_dir / "state.json").write_text(json.dumps(state, indent=2))
+        buyer = order.get("buyer", {}).get("username", "unknown")
+        total = order.get("pricingSummary", {}).get("total", {}).get("value", "?")
+        logger.info(
+            "ORDER %s — HELD FOR MANUAL SHIPPING (unrecognized SKU: %s) | Buyer: %s | Total: $%s",
+            order_id, ", ".join(unknown_skus), buyer, total,
+        )
+        return False
 
     # Generate packing list
     packing_list_path = order_dir / "packing_list.pdf"

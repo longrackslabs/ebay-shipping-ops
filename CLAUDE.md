@@ -79,7 +79,7 @@ SKU weights and parcel dimensions are configured in `~/.ebay-shipper/sku_config.
 - `weight_oz`: item weight in ounces (required)
 - `parcel`: optional box dimensions in inches (`length`, `width`, `height`). If omitted, uses default 9x6x1 envelope.
 - Mixed orders use the largest parcel from any item; weights are summed
-- Unrecognized SKUs default to 3oz and the standard 9x6x1 envelope
+- **Unrecognized or missing SKUs hold the whole order for manual shipping** — no packing list or label is generated, no default weight/box is guessed. Shows in the dashboard as "Manual — Unknown SKU" with `mailed` (shipped by hand) and `cancel` actions. This is deliberate: one-off/personal sales and odd-sized items don't have a configured SKU prefix, and printing a wrong-size label/postage is worse than holding the order.
 - To add a new product: add its SKU prefix to this file on the Linux box. No code changes needed.
 
 ## Test Data
