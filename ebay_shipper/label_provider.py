@@ -91,6 +91,11 @@ def _match_sku(sku: str, sku_config: dict) -> dict:
     return best
 
 
+def is_known_sku(sku: str, sku_config: dict) -> bool:
+    """Return True if the SKU matches a configured prefix — i.e. we know its weight/box."""
+    return bool(_match_sku(sku, sku_config))
+
+
 def calculate_weight(line_items: list[dict], sku_config: dict | None = None) -> float:
     """Calculate total package weight from order line items."""
     config = sku_config or DEFAULT_SKU_CONFIG

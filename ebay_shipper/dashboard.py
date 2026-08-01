@@ -72,6 +72,11 @@ STATES = {
         "next": None, "actions": ["retry"],
         "needs_attention": True, "attention_label": "failed",
     },
+    "unrecognized_sku": {
+        "label": "Manual — Unknown SKU", "badge": "failed",
+        "next": None, "actions": ["mailed", "cancel"],
+        "needs_attention": True, "attention_label": "unrecognized SKU — ship by hand",
+    },
 }
 
 # Derived from STATES — used by endpoints for validation
