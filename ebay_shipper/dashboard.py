@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 
 from ebay_shipper.label_provider import EasyPostProvider, ShipFromAddress, next_pickup_date
+from ebay_shipper.main import retry_order as _retry_order
 from ebay_shipper.printer import print_file
 
 logger = logging.getLogger(__name__)
@@ -209,8 +210,16 @@ def create_app(data_dir: Path, config: dict | None = None) -> FastAPI:
 
     @app.post("/api/orders/{order_id}/retry")
     def retry_order(order_id: str):
-        _validate_action(order_id, "retry")
-        return {"success": True, "message": "Order queued for retry"}
+        _, state_file, state, _ = _validate_action(order_id, "retry")
+        previous = state["status"]
+
+        success = _retry_order(order_id, _config, data_dir)
+
+        new_state = json.loads(state_file.read_text())
+        logger.info("Order %s: retry %s (%s → %s)", order_id, "succeeded" if success else "failed",
+                    previous, new_state["status"])
+
+        return {"success": success, "previous": previous, "status": new_state["status"]}
 
     @app.post("/api/orders/{order_id}/cancel")
     def cancel_order(order_id: str):

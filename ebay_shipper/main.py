@@ -109,6 +109,29 @@ def _generate_error_label(output_path: Path, order_id: str):
     c.save()
 
 
+def retry_order(order_id: str, config: dict, data_dir: Path = None) -> bool:
+    """Re-attempt label purchase for an order stuck in label_failed."""
+    data_dir = data_dir or DATA_DIR
+    order_dir = data_dir / "orders" / order_id
+    order_file = order_dir / "order.json"
+    state_file = order_dir / "state.json"
+    if not order_file.exists():
+        logger.error("Order %s not found (no order.json)", order_id)
+        return False
+    state = json.loads(state_file.read_text()) if state_file.exists() else {}
+    if state.get("status") != "label_failed":
+        logger.error("Order %s status is '%s', not label_failed", order_id, state.get("status"))
+        return False
+    order = json.loads(order_file.read_text())
+    auth = EbayAuth(
+        client_id=config["ebay_client_id"],
+        client_secret=config["ebay_client_secret"],
+        refresh_token=config["ebay_refresh_token"],
+    )
+    label_provider = EasyPostProvider(config["easypost_api_key"])
+    return process_order(order, config, label_provider, data_dir / "orders", auth=auth)
+
+
 def process_order(order: dict, config: dict, label_provider, output_dir: Path, auth: EbayAuth = None) -> bool:
     """Process a single order: generate packing list + label, hold for confirmation."""
     order_id = order["orderId"]
@@ -436,24 +459,7 @@ def main():
 
     if len(sys.argv) >= 3 and sys.argv[1] == "retry":
         order_id = sys.argv[2]
-        order_dir = DATA_DIR / "orders" / order_id
-        order_file = order_dir / "order.json"
-        state_file = order_dir / "state.json"
-        if not order_file.exists():
-            logger.error("Order %s not found (no order.json)", order_id)
-            sys.exit(1)
-        state = json.loads(state_file.read_text()) if state_file.exists() else {}
-        if state.get("status") != "label_failed":
-            logger.error("Order %s status is '%s', not label_failed", order_id, state.get("status"))
-            sys.exit(1)
-        order = json.loads(order_file.read_text())
-        auth = EbayAuth(
-            client_id=config["ebay_client_id"],
-            client_secret=config["ebay_client_secret"],
-            refresh_token=config["ebay_refresh_token"],
-        )
-        label_provider = EasyPostProvider(config["easypost_api_key"])
-        success = process_order(order, config, label_provider, DATA_DIR / "orders", auth=auth)
+        success = retry_order(order_id, config)
         sys.exit(0 if success else 1)
 
     if len(sys.argv) >= 2 and sys.argv[1] == "pickup":

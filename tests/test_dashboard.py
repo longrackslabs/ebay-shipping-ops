@@ -7,9 +7,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from ebay_shipper.label_provider import DEFAULT_SKU_CONFIG
+
 
 TEST_CONFIG = {
     "easypost_api_key": "EZTK_test_key",
+    "ebay_client_id": "test_client_id",
+    "ebay_client_secret": "test_client_secret",
+    "ebay_refresh_token": "test_refresh_token",
+    "sku_config": DEFAULT_SKU_CONFIG,
     "from_name": "George Peden",
     "from_street": "1994 NW 129th Pl",
     "from_city": "Portland",
@@ -220,12 +226,32 @@ def test_rejects_malformed_order_id(client):
     assert resp.status_code == 400
 
 
+@patch("ebay_shipper.main.EasyPostProvider")
 @patch("ebay_shipper.dashboard.print_file")
-def test_retry_order(mock_print, data_dir, client):
-    """POST /api/orders/{id}/retry accepts failed orders."""
+def test_retry_order(mock_print, mock_provider_cls, data_dir, client):
+    """POST /api/orders/{id}/retry accepts failed orders and re-buys the label."""
+    from ebay_shipper.label_provider import ShippingLabel
+
+    mock_print.return_value = True
+    mock_provider = MagicMock()
+    mock_provider.create_label.return_value = ShippingLabel(
+        tracking_number="9400111899223456789999",
+        label_path=data_dir / "orders" / "33-33333-33333" / "label.png",
+        rate="5.97",
+        carrier="USPS",
+        service="GroundAdvantage",
+        shipment_id="shp_retry",
+    )
+    mock_provider_cls.return_value = mock_provider
+
     resp = client.post("/api/orders/33-33333-33333/retry")
     assert resp.status_code == 200
     assert resp.json()["success"] is True
+    assert resp.json()["status"] == "pending_confirmation"
+
+    state = json.loads((data_dir / "orders" / "33-33333-33333" / "state.json").read_text())
+    assert state["status"] == "pending_confirmation"
+    assert state["tracking_number"] == "9400111899223456789999"
 
 
 @patch("ebay_shipper.dashboard.print_file")
